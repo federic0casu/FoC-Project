@@ -1,0 +1,3 @@
+#define CODE_BALANCE  1
+#define CODE_TRANSFER 2
+#define CODE_TRANSFER 3
