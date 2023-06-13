@@ -27,9 +27,16 @@ void Client::connect_to_server()
     std::cout << "Connected to the server." << std::endl;
 }
 
+<<<<<<< HEAD
 bool Client::list()
 {
     try {
+=======
+void Client::send_request(const uint8_t* message, uint32_t len)
+{
+    if (send(sock_fd, message, len, 0) == -1)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to send the request.");
+>>>>>>> cd06b724b398af0c0293ededdcb4b9a5e0e0582f
 
     }
     catch(std::runtime_error& e) {
