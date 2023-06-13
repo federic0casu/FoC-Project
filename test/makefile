@@ -5,9 +5,6 @@ LIBS = -lssl -lcrypto -pthread
 SERVER_SRCS = ../src/Server.cpp ../src/main_server.cpp
 CLIENT_SRCS = ../src/Client.cpp ../src/main_client.cpp
 
-SERVER_OBJS = $(SERVER_SRCS:.cpp=.o)
-CLIENT_OBJS = $(CLIENT_SRCS:.cpp=.o)
-
 SERVER_EXEC = server
 CLIENT_EXEC = client
 
@@ -16,14 +13,11 @@ CLIENT_EXEC = client
 all: $(SERVER_EXEC) $(CLIENT_EXEC)
 
 $(SERVER_EXEC): $(SERVER_OBJS)
-	$(CXX) $(CXXFLAGS) $(SERVER_OBJS) -o $(SERVER_EXEC) $(LIBS)
+	$(CXX) $(CXXFLAGS) $(SERVER_SRCS) -o $(SERVER_EXEC) $(LIBS)
 
 $(CLIENT_EXEC): $(CLIENT_OBJS)
-	$(CXX) $(CXXFLAGS) $(CLIENT_OBJS) -o $(CLIENT_EXEC) $(LIBS)
-
-.cpp.o:
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(CLIENT_SRCS) -o $(CLIENT_EXEC) $(LIBS)
 
 clean:
-	rm -f $(SERVER_OBJS) $(CLIENT_OBJS) $(SERVER_EXEC) $(CLIENT_EXEC)
+	rm -f $(SERVER_EXEC) $(CLIENT_EXEC)
 

@@ -23,11 +23,11 @@ int main(int argc, char* argv[])
     }
 
     try {
-	    port      = atoi(argv[1]);
+	port      = atoi(argv[1]);
         n_workers = atoi(argv[2]);
         backlog   = atoi(argv[3]);
 
-	    Server server(port, n_workers, backlog, &g_signal_flag);
+	Server server(port, n_workers, backlog, &g_signal_flag);
 
         // Set up the signal handler for Ctrl+C (SIGINT)
         std::signal(SIGINT, handle_signal);

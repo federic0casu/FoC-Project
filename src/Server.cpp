@@ -23,8 +23,6 @@ Server::Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_si
     // Instantiating a TCP socket (listen socket).
     sock_fd = create_socket();
 
-    set_reuse();
-
     // Binding the socket to the server address and port
     bind_socket();  
 
@@ -41,15 +39,15 @@ Server::Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_si
 
 Server::~Server() 
 {
-    __jobs.stop = true;
+    jobs.stop = true;
 
     // Awaking threads to notify that they should stop.
-    __jobs.socket_cv.notify_all();
+    jobs.socket_cv.notify_all();
 
     for (auto& thread : threads)
         thread.join();
 
-    for (int client_socket : __jobs.socket_queue)
+    for (int client_socket : jobs.socket_queue)
         close(client_socket);
 
     if (sock_fd != -1) close(sock_fd);
@@ -64,7 +62,7 @@ Server::~Server()
 
 void Server::accept_connections()
 {
-    __jobs.stop = false;
+    jobs.stop = false;
 
     // Reserves space in the 'threads' vector to hold the worker threads.
     threads.reserve(n_workers);
@@ -119,13 +117,13 @@ void Server::accept_connections()
         {
             // This lock ensures that 'socket_queue' is accessed safely 
             // by preventing concurrent access from multiple threads.
-            std::lock_guard<std::mutex> lock(__jobs.socket_mutex);
+            std::lock_guard<std::mutex> lock(jobs.socket_mutex);
 
-            __jobs.socket_queue.push_back(client_socket);
+            jobs.socket_queue.push_back(client_socket);
         }
 
         // This notifies one waiting worker thread that a new connection is available in the queue.
-        __jobs.socket_cv.notify_one();
+        jobs.socket_cv.notify_one();
     }
 }
 
@@ -183,10 +181,10 @@ void Server::worker(int id)
         int client_socket;
 
         {
-            std::unique_lock<std::mutex> lock(__jobs.socket_mutex);
-            __jobs.socket_cv.wait(lock, [&]() { return !__jobs.socket_queue.empty() || __jobs.stop; });
+            std::unique_lock<std::mutex> lock(jobs.socket_mutex);
+            jobs.socket_cv.wait(lock, [&]() { return !jobs.socket_queue.empty() || jobs.stop; });
 
-            if (__jobs.stop) 
+            if (jobs.stop) 
             {
                 #ifdef DEBUG
                 std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> stop" << std::endl;
@@ -194,8 +192,8 @@ void Server::worker(int id)
                 return;
             }
 
-            client_socket = __jobs.socket_queue.front();
-            __jobs.socket_queue.erase(__jobs.socket_queue.begin());
+            client_socket = jobs.socket_queue.front();
+            jobs.socket_queue.erase(jobs.socket_queue.begin());
         }
 
         #ifdef DEBUG
