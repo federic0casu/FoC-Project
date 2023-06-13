@@ -16,12 +16,9 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#define GREEN_BOLD "\033[1;32m"
-#define BLUE_BOLD  "\033[1;34m"
-#define RED_BOLD   "\033[1;31m"
-#define RESET      "\033[0m"
+#include "../Generic/Utility.hpp"
+#include "../Packet/List.hpp"
 
-#define DEBUG 0
 
 struct jobs {
     std::vector<int> socket_queue;
@@ -29,8 +26,8 @@ struct jobs {
     std::mutex socket_mutex;
     std::condition_variable socket_cv;
 };
-
 typedef struct jobs jobs_t;
+
 
 class Server {
 
@@ -55,4 +52,7 @@ private:
     void bind_socket();     // To bind the listener socket.   
     void listen_socket();   // To listen the incoming connection (using listener socket).
     void worker(int);       // Method called by workers.
+    
+    ssize_t send_to_client(int, uint8_t*, ssize_t);
+    ssize_t recv_from_client(int, uint8_t*, ssize_t);
 };

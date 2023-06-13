@@ -157,8 +157,6 @@ inline void Server::bind_socket()
 }
 
 
-
-
 inline void Server::listen_socket()
 {
     if (listen(sock_fd, backlog) == -1) 
@@ -230,11 +228,36 @@ void Server::worker(int id)
 }
 
 
-void Server::HandleRequest(uint8_t * buffer){
-
-// handles a client request
-
-    
 
 
+ssize_t Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_sent = 0;
+
+    while (total_bytes_sent < buffer_size) 
+    {
+        ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+        if (bytes_sent == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
+        
+        total_bytes_sent += bytes_sent;
+    }
+
+    return total_bytes_sent;
 }
+
+ssize_t Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_received = 0;
+
+    while (total_bytes_received < buffer_size) 
+    {
+        ssize_t bytes_received = recv(sock_fd, (void*) (buffer + total_bytes_received), buffer_size - total_bytes_received, 0);
+        if (bytes_received == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
+        
+        total_bytes_received += bytes_received;
+    }
+
+    return total_bytes_received;
+
