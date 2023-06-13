@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 
 #include "../Packet/List.hpp"
+#include "../Packet/ClientReq.hpp"
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
 

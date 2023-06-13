@@ -1,5 +1,4 @@
 #include "Server.hpp"
-#include "../Packet/ClientReq.h"
 
 
 Server::Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_signal_flag)
@@ -37,7 +36,6 @@ Server::Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_si
 #endif
 }
 
-
 Server::~Server() 
 {
     jobs.stop = true;
@@ -59,7 +57,6 @@ Server::~Server()
     std::cout << "###########################" << std::endl;
 #endif
 }
-
 
 void Server::accept_connections()
 {
@@ -128,7 +125,6 @@ void Server::accept_connections()
     }
 }
 
-
 inline int Server::create_socket() 
 {
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -140,7 +136,6 @@ inline int Server::create_socket()
     }
     return socket_fd;
 }
-
 
 inline void Server::bind_socket() 
 {
@@ -156,7 +151,6 @@ inline void Server::bind_socket()
     }
 }
 
-
 inline void Server::listen_socket()
 {
     if (listen(sock_fd, backlog) == -1) 
@@ -165,7 +159,6 @@ inline void Server::listen_socket()
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to listen on socket: " + error_message);
     }
 }
-
 
 void Server::worker(int id) 
 {
@@ -192,14 +185,9 @@ void Server::worker(int id)
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client connected (socket: " << client_socket << ")." << std::endl;
         #endif
 
-<<<<<<< HEAD
         try {
             unsigned char buffer[4096] = { 0 };
             recv_from_client(client_socket, buffer, sizeof(buffer) - 1);
-=======
-        uint8_t  buffer[4096] = { 0 };
-        ssize_t bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
->>>>>>> cd06b724b398af0c0293ededdcb4b9a5e0e0582f
 
             std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
             std::cout << "Client " << client_socket << ": " << buffer << std::endl;
@@ -216,7 +204,6 @@ void Server::worker(int id)
             continue;
         }
 
-<<<<<<< HEAD
         try {
             List list_response_1(CODE_LIST_RESPONSE_1, 1);
             list_response_1.serialize();
@@ -237,19 +224,6 @@ void Server::worker(int id)
             continue;
         }
 
-
-=======
-        std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
-
-
-        // test 
-        ClientReq request;
-        request = request.deserialize(buffer);
-        std::cout << "Client" << client_socket << ": " 
-                  << (char)request.request_code << ":" 
-                  << request.recipient << ":" 
-                  << (int)request.amount <<  std::endl;
->>>>>>> cd06b724b398af0c0293ededdcb4b9a5e0e0582f
         close(client_socket);
 
         #ifdef DEBUG
@@ -259,13 +233,7 @@ void Server::worker(int id)
 }
 
 
-<<<<<<< HEAD
 void Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
-=======
-
-
-ssize_t Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
->>>>>>> cd06b724b398af0c0293ededdcb4b9a5e0e0582f
 {
     ssize_t total_bytes_sent = 0;
 
@@ -298,10 +266,4 @@ void Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 
         total_bytes_received += bytes_received;
     }
-<<<<<<< HEAD
 }
-=======
-
-    return total_bytes_received;
-
->>>>>>> cd06b724b398af0c0293ededdcb4b9a5e0e0582f
