@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "../Packet/ClientReq.h"
 
 
 Server::Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_signal_flag)
@@ -155,14 +156,7 @@ inline void Server::bind_socket()
     }
 }
 
-inline void Server::set_reuse() 
-{
-    int reuse = 1;    
-    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
-        std::string error_message = strerror(errno);
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to set 'reuse' option " + error_message);
-    }
-}
+
 
 
 inline void Server::listen_socket()
@@ -200,7 +194,7 @@ void Server::worker(int id)
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client connected (socket: " << client_socket << ")." << std::endl;
         #endif
 
-        char buffer[4096] = { 0 };
+        uint8_t  buffer[4096] = { 0 };
         ssize_t bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
         if (bytes_read == -1) 
@@ -218,11 +212,29 @@ void Server::worker(int id)
         }
 
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
-        std::cout << "Client " << client_socket << ": " << buffer << std::endl;
+
+
+        // test 
+        ClientReq request;
+        request = request.deserialize(buffer);
+        std::cout << "Client" << client_socket << ": " 
+                  << (char)request.request_code << ":" 
+                  << request.recipient << ":" 
+                  << (int)request.amount <<  std::endl;
         close(client_socket);
 
         #ifdef DEBUG
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client disconnected (socket: " << client_socket << ")." << std::endl;
         #endif
     }
+}
+
+
+void Server::HandleRequest(uint8_t * buffer){
+
+// handles a client request
+
+    
+
+
 }

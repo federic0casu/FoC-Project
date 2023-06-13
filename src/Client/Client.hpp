@@ -20,5 +20,5 @@ public:
     Client(const std::string& server_ip, int server_port);
     ~Client();
     void connect_to_server();
-    void send_request(const std::string& message);
+    void send_request(const uint8_t* message,uint32_t len);
 };

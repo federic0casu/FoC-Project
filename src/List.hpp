@@ -1,5 +1,5 @@
 #include <ctime>
-#inclide <string.h>
+#include <string.h>
 #include <arpa/inet.h>
 
 
