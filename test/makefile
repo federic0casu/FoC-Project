@@ -2,8 +2,8 @@ CXX = g++
 CXXFLAGS = -std=c++11 -Wall -Wextra -Werror
 LIBS = -lssl -lcrypto -pthread
 
-SERVER_SRCS = ../src/Server.cpp ../src/main_server.cpp
-CLIENT_SRCS = ../src/Client.cpp ../src/main_client.cpp
+SERVER_SRCS = ../src/Server/Server.cpp ../src/Server/main_server.cpp
+CLIENT_SRCS = ../src/Client/Client.cpp ../src/Client/main_client.cpp
 
 SERVER_EXEC = server
 CLIENT_EXEC = client
