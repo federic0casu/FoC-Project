@@ -27,10 +27,49 @@ void Client::connect_to_server()
     std::cout << "Connected to the server." << std::endl;
 }
 
-void Client::send_request(const std::string& message)
+bool Client::list()
 {
-    if (send(sock_fd, message.c_str(), message.size(), 0) == -1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to send the request.");
+    try {
 
-    std::cout << "Request sent: " << message << std::endl;
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+void Client::send_to_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_sent = 0;
+
+    while (total_bytes_sent < buffer_size) 
+    {
+        ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+        
+        if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
+        if (bytes_sent == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
+
+        total_bytes_sent += bytes_sent;
+    }
+}
+
+void Client::recv_from_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_received = 0;
+
+    while (total_bytes_received < buffer_size) 
+    {
+        ssize_t bytes_received = recv(sock_fd, (void*) (buffer + total_bytes_received), buffer_size - total_bytes_received, 0);
+        if (bytes_received == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
+
+        if (bytes_received == 0)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
+        total_bytes_received += bytes_received;
+    }
 }

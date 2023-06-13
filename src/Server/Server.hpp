@@ -16,8 +16,9 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#include "../Generic/Utility.hpp"
 #include "../Packet/List.hpp"
+#include "../Generic/Codes.hpp"
+#include "../Generic/Utility.hpp"
 
 
 struct jobs {
@@ -53,6 +54,6 @@ private:
     void listen_socket();   // To listen the incoming connection (using listener socket).
     void worker(int);       // Method called by workers.
     
-    ssize_t send_to_client(int, uint8_t*, ssize_t);
-    ssize_t recv_from_client(int, uint8_t*, ssize_t);
+    void send_to_client(int, uint8_t*, ssize_t);
+    void recv_from_client(int, uint8_t*, ssize_t);
 };

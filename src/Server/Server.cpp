@@ -191,25 +191,46 @@ void Server::worker(int id)
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client connected (socket: " << client_socket << ")." << std::endl;
         #endif
 
-        char buffer[4096] = { 0 };
-        ssize_t bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+        try {
+            unsigned char buffer[4096] = { 0 };
+            recv_from_client(client_socket, buffer, sizeof(buffer) - 1);
 
-        if (bytes_read == -1) 
-        {
-            close(client_socket);
-            throw std::runtime_error("\033[1;31m[ERROR]\033[0m recv error");
+            std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
+            std::cout << "Client " << client_socket << ": " << buffer << std::endl;
         }
-
-        if (bytes_read == 0) 
-        {
+        catch(std::runtime_error& e) {
             #ifdef DEBUG
-            std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client disconnected (socket: " << client_socket << ")." << std::endl;
+            std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
             #endif
+            std::cerr << e.what() << std::endl;
             close(client_socket);
+
+            // Something went wrong: we need to clear the session (session key and HMAC key).
+
+            continue;
         }
 
-        std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
-        std::cout << "Client " << client_socket << ": " << buffer << std::endl;
+        try {
+            List list_response_1(CODE_LIST_RESPONSE_1, 1);
+            list_response_1.serialize();
+            ssize_t buffer_size = sizeof(list_response_1.get_buffer()); 
+            
+            send_to_client(client_socket, list_response_1.get_buffer(), buffer_size);
+        }
+        catch(std::runtime_error& e) {
+            #ifdef DEBUG
+            std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
+            #endif
+
+            std::cerr << e.what() << std::endl;
+            close(client_socket);
+
+            // Something went wrong: we need to clear the session (session key and HMAC key).
+
+            continue;
+        }
+
+
         close(client_socket);
 
         #ifdef DEBUG
@@ -219,23 +240,25 @@ void Server::worker(int id)
 }
 
 
-ssize_t Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+void Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_sent = 0;
 
     while (total_bytes_sent < buffer_size) 
     {
         ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+        
+        if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
         if (bytes_sent == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
-        
+
         total_bytes_sent += bytes_sent;
     }
-
-    return total_bytes_sent;
 }
 
-ssize_t Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+void Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_received = 0;
 
@@ -244,9 +267,10 @@ ssize_t Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_si
         ssize_t bytes_received = recv(sock_fd, (void*) (buffer + total_bytes_received), buffer_size - total_bytes_received, 0);
         if (bytes_received == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
-        
+
+        if (bytes_received == 0)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
         total_bytes_received += bytes_received;
     }
-
-    return total_bytes_received;
 }

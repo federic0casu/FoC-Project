@@ -13,9 +13,7 @@ int main(int argc, char* argv[])
         Client client(server_ip, atoi(argv[1]));
         client.connect_to_server();
 
-        std::string message = "HELLO";
-
-        client.send_request(message);
+        // KEY EXCHANGE and AUTHENTICATION
     } 
     catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

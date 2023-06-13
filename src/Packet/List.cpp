@@ -62,13 +62,13 @@ void List::set_dest(uint8_t* username, ssize_t username_size)
 
 void List::serialize() 
 {
-    buffer.serialize(code_response, dest, amount, timestamp);
+    to_send.serialize(code_response, dest, amount, timestamp);
 }
 
 void List::deserialize()
 {
-    code_response = buffer.deserialize_code();
-    buffer.deserialize_user(dest);
-    amount = buffer.deserialize_amount();
-    timestamp = (std::time_t) buffer.deserialize_timestamp();
+    code_response = to_send.deserialize_code();
+    to_send.deserialize_user(dest);
+    amount = to_send.deserialize_amount();
+    timestamp = (std::time_t) to_send.deserialize_timestamp();
 }

@@ -25,11 +25,13 @@ struct List {
     uint32_t    amount;
     std::time_t timestamp;
 
-    plaintext_t buffer;
+    plaintext_t to_send;
     
-    List(int v1) : code_response(v1) {}
+    List(int v1, uint32_t v2) : code_response(v1), amount(v2) {}
     List(int v1, uint32_t v2, std::time_t v3) : code_response(v1), amount(v2), timestamp(v3) {}
     void set_dest(uint8_t* username, ssize_t username_size);
     void serialize();
     void deserialize();
+
+    uint8_t* get_buffer() { return to_send.buffer; }
 };

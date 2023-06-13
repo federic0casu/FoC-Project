@@ -8,9 +8,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define GREEN_BOLD "\033[1;32m"
-#define RED_BOLD   "\033[1;31m"
-#define RESET      "\033[0m"
+#include "../Packet/List.hpp"
+#include "../Generic/Codes.hpp"
+#include "../Generic/Utility.hpp"
 
 class Client {
     int sock_fd;
@@ -20,5 +20,8 @@ public:
     Client(const std::string& server_ip, int server_port);
     ~Client();
     void connect_to_server();
-    void send_request(const std::string& message);
+    void send_to_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size);
+    void recv_from_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size);
+    
+    bool list();        // To get list of transactions.
 };
