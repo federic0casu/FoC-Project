@@ -17,9 +17,15 @@ struct ClientReq {
 
   ClientReq() {}
 
-  ClientReq(uint16_t code, uint32_t amount, uint8_t* recipient)
+  ClientReq(uint16_t request_code, uint32_t amount)
   {
-    request_code = code;
+    this->request_code = request_code;
+    this->amount = amount;
+  }
+
+  ClientReq(uint16_t request_code, uint32_t amount, uint8_t* recipient)
+  {
+    this->request_code = request_code;
     memcpy((void*) this->recipient, (void*) recipient, RECIPIENT_SIZE);
     this->amount = amount;    
   }

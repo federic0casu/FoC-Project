@@ -186,16 +186,15 @@ void Server::worker(int id)
         #endif
 
         try {
+            ClientReq request;
             while(true) 
             {
-                uint8_t buffer[REQUEST_PACKET_SIZE] = { 0 };
-                recv_from_client(client_socket, buffer, REQUEST_PACKET_SIZE);
+                request = handle_request(client_socket);
 
-                ClientReq request;
-                request = request.deserialize(buffer);
-
+                #ifdef DEBUG
                 std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
-                std::cout << "Client " << client_socket << ": " << request.recipient << std::endl;
+                std::cout << "Client " << client_socket << " -> " << request.request_code << ":" << request.recipient << ":" << request.amount << std::endl;
+                #endif 
 
                 switch(request.request_code) 
                 {
@@ -233,6 +232,24 @@ void Server::worker(int id)
     }
 }
 
+ClientReq Server::handle_request(int client_socket)
+{
+    uint8_t* buffer = new uint8_t[REQUEST_PACKET_SIZE];
+
+    if(buffer == NULL)
+    {
+        char message[sizeof("Couldn't handle list request (socket: )") + sizeof(int)] = { 0 };
+        sprintf(message, "Couldn't handle list request (socket: %d)", client_socket);
+        throw std::runtime_error(message);
+    }
+
+    recv_from_client(client_socket, buffer, REQUEST_PACKET_SIZE);
+
+    ClientReq to_return =  ClientReq::deserialize(buffer);
+    delete[] buffer;
+    return to_return;
+}
+
 void Server::balance(int client_socket, int thread_id) 
 {
     #ifdef DEBUG
@@ -255,14 +272,14 @@ void Server::list(int client_socket, int thread_id)
     #ifdef DEBUG
     std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> list (socket: " << client_socket << ")." << std::endl;
     #endif
+  
     /*
     try {
-        List list_response_1(CODE_LIST_RESPONSE_1, 1);
-        
+        List response_1(CODE_LIST_RESPONSE_1, 1);
         uint8_t to_send[LIST_RESPONSE_1_SIZE];
-        list_response_1.serialize(to_send); 
-            
-        send_to_client(client_socket, to_send, sizeof(uint8_t[LIST_RESPONSE_1_SIZE]));
+
+        response_1.serialize(to_send);    
+        send_to_client(client_socket, &to_send[0], sizeof(uint8_t[LIST_RESPONSE_1_SIZE]));
     }
     catch(std::runtime_error& e) {
         #ifdef DEBUG
@@ -286,8 +303,11 @@ void Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
     {
         ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
         
-        if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
-            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+        if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            char message[sizeof("Client disconnected (socket: )") + sizeof(int)] = { 0 };
+            sprintf(message, "Client disconnected (socket: %d)", sock_fd);
+            throw std::runtime_error(message);
+        }
 
         if (bytes_sent == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
@@ -307,7 +327,8 @@ void Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
 
         if (bytes_received == 0) {
-            std::string message = "Client disconnected, socket: " + sock_fd;
+            char message[sizeof("Client disconnected (socket: )") + sizeof(int)] = { 0 };
+            sprintf(message, "Client disconnected (socket: %d)", sock_fd);
             throw std::runtime_error(message);
         }
 

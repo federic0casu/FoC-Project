@@ -54,7 +54,9 @@ private:
     void bind_socket();     // To bind the listener socket.   
     void listen_socket();   // To listen the incoming connection (using listener socket).
     void worker(int);       // Method called by workers.
-    
+   
+    ClientReq handle_request(int);
+
     void balance(int, int);
     void transfer(int, int);
     void list(int, int);

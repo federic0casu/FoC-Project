@@ -6,9 +6,11 @@ volatile sig_atomic_t g_signal_flag = 0;
 // Signal handler function for Ctrl+C
 void handle_signal(int signal)
 {
-    if (signal == SIGINT)
+    if (signal == SIGINT) {
         // Set the flag to indicate that Ctrl+C was pressed
         g_signal_flag = 1;
+        std::cout << "\b\b";
+    }
 }
 
 int main(int argc, char* argv[])

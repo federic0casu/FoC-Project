@@ -34,16 +34,11 @@ void Client::balance()
         ClientReq balance_request(CODE_BALANCE_REQUEST, 0, &buffer[0]);
 
         #ifdef DEBUG
-        std::cout << "[1] balance: " << buffer << std::endl;
+        std::cout << "[1] balance -> " << balance_request.request_code << ":" << balance_request.recipient << ":" << balance_request.amount << std::endl;
         #endif
 
         uint8_t to_send[REQUEST_PACKET_SIZE];
         balance_request.serialize(to_send);
-
-        #ifdef DEBUG
-        std::cout << "[2] balance.serialize: " << to_send << std::endl;
-        #endif
-
         send_to_server(to_send, balance_request.get_size());
     }
     catch(std::runtime_error& e) {
@@ -58,16 +53,11 @@ void Client::transfer()
         ClientReq transfer_request(CODE_TRANSFER_REQUEST, 0, &buffer[0]);
 
         #ifdef DEBUG
-        std::cout << "[1] transfer: " << buffer << std::endl;
+        std::cout << "[1] transfer -> " << transfer_request.request_code << ":" << transfer_request.recipient << ":" << transfer_request.amount << std::endl;
         #endif
 
         uint8_t to_send[REQUEST_PACKET_SIZE];
         transfer_request.serialize(to_send);
-
-        #ifdef DEBUG
-        std::cout << "[2] transfer.serialize: " << to_send << std::endl;
-        #endif
-
         send_to_server(to_send, transfer_request.get_size());
     }
     catch(std::runtime_error& e) {
@@ -79,21 +69,30 @@ void Client::transfer()
 void Client::list()
 {
     try {
-        uint8_t buffer[RECIPIENT_SIZE] = "PADDING_PADDING_PADDING_PADDING";
-        ClientReq list_request(CODE_LIST_REQUEST, 0, &buffer[0]);
+        /*--------------- STEP 1: send a list request (request_code: 0x03) ---------------*/
+        uint8_t buffer[RECIPIENT_SIZE] = "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^";
+        ClientReq list_request(CODE_LIST_REQUEST, 0, buffer);
 
         #ifdef DEBUG
-        std::cout << "[1] list: " << buffer << std::endl;
+        std::cout << "[1] list -> " << list_request.request_code << ":" << list_request.recipient << ":" << list_request.amount << std::endl;
         #endif
 
         uint8_t to_send[REQUEST_PACKET_SIZE];
         list_request.serialize(to_send);
+        send_to_server(to_send, list_request.get_size());
+        /*--------------------------------------------------------------------------------*/
+
+        /*-------- STEP 2: receive number of transaction (request_response: 0x06) --------/
+        uint8_t to_recv[LIST_RESPONSE_1_SIZE];
+            
+        recv_from_server(to_recv, sizeof(uint8_t[LIST_RESPONSE_1_SIZE]));
+
+        List response_1 = List::deserialize(to_recv);
 
         #ifdef DEBUG
-        std::cout << "[2] list.serialize: " << to_send << std::endl;
+        std::cout << "[2] list -> " << response_1.code_response << ":" << response_1.dest << ":" << response_1.amount << ":" << response_1.timestamp << std::endl;
         #endif
-
-        send_to_server(to_send, list_request.get_size());
+        /*--------------------------------------------------------------------------------*/
     }
     catch(std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
@@ -109,7 +108,7 @@ void Client::send_to_server(uint8_t* buffer, ssize_t buffer_size)
         ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
         
         if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
-            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Server disconnected");
 
         if (bytes_sent == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
@@ -129,7 +128,7 @@ void Client::recv_from_server(uint8_t* buffer, ssize_t buffer_size)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
 
         if (bytes_received == 0)
-            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Server disconnected");
 
         total_bytes_received += bytes_received;
     }
