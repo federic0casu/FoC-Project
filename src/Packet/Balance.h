@@ -9,6 +9,7 @@
 using namespace std;
 
 struct BalanceResponse {
+  
   uint32_t account_id;
   uint32_t balance;
 

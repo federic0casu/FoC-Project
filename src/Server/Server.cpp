@@ -157,6 +157,7 @@ inline void Server::bind_socket()
 }
 
 
+
 inline void Server::listen_socket()
 {
     if (listen(sock_fd, backlog) == -1) 
@@ -189,7 +190,9 @@ void Server::worker(int id)
         }
 
         #ifdef DEBUG
-        std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client connected (socket: " << client_socket << ")." << std::endl;
+        std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET 
+                  << " >> Client connected (socket: "
+                  << client_socket << ")." << std::endl;
         #endif
 
         uint8_t  buffer[4096] = { 0 };
@@ -211,15 +214,27 @@ void Server::worker(int id)
 
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
 
+        /* ------------------------- SERVER LOGIC ------------------------------ */
+        /* --------------------------------------------------------------------- */
+        /* --------------------------------------------------------------------- */
+
 
         // test 
         ClientReq request;
+
         request = request.deserialize(buffer);
         std::cout << "Client" << client_socket << ": " 
                   << (char)request.request_code << ":" 
                   << request.recipient << ":" 
                   << (int)request.amount <<  std::endl;
         close(client_socket);
+
+
+        /* --------------------------------------------------------------------- */
+        /* --------------------------------------------------------------------- */
+        /* --------------------------------------------------------------------- */
+
+
 
         #ifdef DEBUG
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client disconnected (socket: " << client_socket << ")." << std::endl;
@@ -260,4 +275,5 @@ ssize_t Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_si
     }
 
     return total_bytes_received;
+}
 
