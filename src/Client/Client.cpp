@@ -27,10 +27,110 @@ void Client::connect_to_server()
     std::cout << "Connected to the server." << std::endl;
 }
 
-void Client::send_request(const uint8_t* message, uint32_t len)
+void Client::balance()
 {
-    if (send(sock_fd, message, len, 0) == -1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to send the request.");
+    try {
+        uint8_t buffer[RECIPIENT_SIZE] = "PADDiNG_PADDiNG_PADDiNG_PADDiNG";
+        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, &buffer[0]);
 
-    std::cout << "Request sent: " << message << std::endl;
+        #ifdef DEBUG
+        std::cout << "[1] balance: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        balance_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] balance.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, balance_request.get_size());
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
+void Client::transfer()
+{
+    try {
+        uint8_t buffer[RECIPIENT_SIZE] = "PaDDING_PaDDING_PaDDING_PaDDING";
+        ClientReq transfer_request(CODE_TRANSFER_REQUEST, 0, &buffer[0]);
+
+        #ifdef DEBUG
+        std::cout << "[1] transfer: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        transfer_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] transfer.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, transfer_request.get_size());
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
+
+void Client::list()
+{
+    try {
+        uint8_t buffer[RECIPIENT_SIZE] = "PADDING_PADDING_PADDING_PADDING";
+        ClientReq list_request(CODE_LIST_REQUEST, 0, &buffer[0]);
+
+        #ifdef DEBUG
+        std::cout << "[1] list: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        list_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] list.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, list_request.get_size());
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
+void Client::send_to_server(uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_sent = 0;
+
+    while (total_bytes_sent < buffer_size) 
+    {
+        ssize_t bytes_sent = send(sock_fd, (void*) (buffer + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+        
+        if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
+        if (bytes_sent == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to send data");
+
+        total_bytes_sent += bytes_sent;
+    }
+}
+
+void Client::recv_from_server(uint8_t* buffer, ssize_t buffer_size)
+{
+    ssize_t total_bytes_received = 0;
+
+    while (total_bytes_received < buffer_size) 
+    {
+        ssize_t bytes_received = recv(sock_fd, (void*) (buffer + total_bytes_received), buffer_size - total_bytes_received, 0);
+        if (bytes_received == -1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m failed to receive data");
+
+        if (bytes_received == 0)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Client disconnected");
+
+        total_bytes_received += bytes_received;
+    }
 }

@@ -1,5 +1,4 @@
 #include "Client.hpp"
-#include "../Packet/ClientReq.h"
 
 int main(int argc, char* argv[])
 {
@@ -14,14 +13,12 @@ int main(int argc, char* argv[])
         Client client(server_ip, atoi(argv[1]));
         client.connect_to_server();
 
+        // KEY EXCHANGE and AUTHENTICATION
 
         // test
-        uint8_t recipient[32] = "berlusca";
-        ClientReq req(5,recipient);
-        std::cout << "Codice della richiesta: "<< (char)req.request_code << "amount:" << req.amount <<  std::endl; 
-        uint8_t* message = req.serialize();
-        std::cout << "Dimesione del pacchetto di richiesta" << req.getSize() << std::endl;
-        client.send_request(message,req.getSize());
+        client.balance();
+        client.transfer();
+        client.list();
     } 
     catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
