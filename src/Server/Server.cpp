@@ -45,6 +45,9 @@ Server::~Server()
 
     for (auto& thread : threads)
         thread.join();
+    
+    for (auto& worker : workers)
+        delete worker;
 
     for (int client_socket : jobs.socket_queue)
         close(client_socket);
@@ -64,9 +67,12 @@ void Server::accept_connections()
 
     // Reserves space in the 'threads' vector to hold the worker threads.
     threads.reserve(n_workers);
+    workers.reserve(n_workers);
 
     for (int i = 0; i < n_workers; i++) {
-        threads.emplace_back([this,i]() { worker(i); });
+        Worker* worker = new Worker(n_workers, &jobs);
+        workers.push_back(worker);
+        threads.emplace_back([&worker]() { worker->Run(); });
     }
 
     struct sockaddr_in client_address;
@@ -161,11 +167,11 @@ inline void Server::listen_socket()
     }
 }
 
+/*
 void Server::worker(int id) 
 {
     while (true) {
         int client_socket;
-
         {
             std::unique_lock<std::mutex> lock(jobs.socket_mutex);
             jobs.socket_cv.wait(lock, [&]() { return !jobs.socket_queue.empty() || jobs.stop; });
@@ -229,18 +235,14 @@ void Server::worker(int id)
             continue;
         }
 
-
-        std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> ";
-
-
-
-
         #ifdef DEBUG
         std::cout << BLUE_BOLD << "THREAD[" << id << "]" << RESET << " >> Client disconnected (socket: " << client_socket << ")." << std::endl;
         #endif
     }
 }
+*/
 
+/*
 ClientReq Server::handle_request(int client_socket)
 {
     uint8_t* buffer = new uint8_t[REQUEST_PACKET_SIZE];
@@ -258,7 +260,9 @@ ClientReq Server::handle_request(int client_socket)
     delete[] buffer;
     return to_return;
 }
+*/
 
+/*
 void Server::balance(int client_socket, int thread_id) 
 {
     #ifdef DEBUG
@@ -266,7 +270,9 @@ void Server::balance(int client_socket, int thread_id)
     #endif
 
 }
+*/
 
+/*
 void Server::transfer(int client_socket, int thread_id) 
 {
     #ifdef DEBUG
@@ -274,36 +280,19 @@ void Server::transfer(int client_socket, int thread_id)
     #endif
 
 }
+*/
 
+/*
 void Server::list(int client_socket, int thread_id)
 {
 
     #ifdef DEBUG
     std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> list (socket: " << client_socket << ")." << std::endl;
     #endif
-  
-    /*
-    try {
-        List response_1(CODE_LIST_RESPONSE_1, 1);
-        uint8_t to_send[LIST_RESPONSE_1_SIZE];
-
-        response_1.serialize(to_send);    
-        send_to_client(client_socket, &to_send[0], sizeof(uint8_t[LIST_RESPONSE_1_SIZE]));
-    }
-    catch(std::runtime_error& e) {
-        #ifdef DEBUG
-        std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> ";
-        #endif
-
-        std::cerr << e.what() << std::endl;
-        close(client_socket);
-
-        // Something went wrong: we need to clear the session (session key and HMAC key).
-    }
-    */
 }
+*/
 
-
+/*
 void Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_sent = 0;
@@ -324,7 +313,9 @@ void Server::send_to_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
         total_bytes_sent += bytes_sent;
     }
 }
+*/
 
+/*
 void Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_received = 0;
@@ -343,10 +334,5 @@ void Server::recv_from_client(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
 
         total_bytes_received += bytes_received;
     }
-
-
-    return total_bytes_received;
 }
-
-
-}
+*/

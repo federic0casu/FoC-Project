@@ -1,8 +1,8 @@
-#include <iostream>
+#include <vector>
 #include <string>
 #include <cstdint>
 #include <cstring>
-#include <openssl/rand.h>
+#include <iostream>
 
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
@@ -30,35 +30,39 @@ struct ClientReq {
     this->amount = amount;    
   }
 
-  void serialize(uint8_t* buffer)
+  void serialize(std::vector<uint8_t>& buffer)
   {
     size_t position = 0;
-   
+
     request_code = htons(request_code);
-    memcpy(buffer, &request_code, sizeof(uint16_t));
+    buffer.resize(position + sizeof(uint16_t));
+    std::memcpy(buffer.data() + position, &request_code, sizeof(uint16_t));
     position += sizeof(uint16_t);
 
-    memcpy(buffer + position, &recipient, sizeof(uint8_t[RECIPIENT_SIZE]));
-    position += sizeof(uint8_t[RECIPIENT_SIZE]);
+    buffer.resize(position + sizeof(uint8_t) * RECIPIENT_SIZE);
+    std::memcpy(buffer.data() + position, &recipient, sizeof(uint8_t) * RECIPIENT_SIZE);
+    position += sizeof(uint8_t) * RECIPIENT_SIZE;
 
     amount = htonl(amount);
-    memcpy(buffer + position, &amount, sizeof(uint32_t));
+    buffer.resize(position + sizeof(uint32_t));
+    std::memcpy(buffer.data() + position, &amount, sizeof(uint32_t));
   }
 
-  static ClientReq deserialize(uint8_t* buffer) 
+
+  static ClientReq deserialize(const std::vector<uint8_t>& buffer)
   {
     ClientReq req;
-    
+
     size_t position = 0;
 
-    memcpy(&req.request_code, buffer, sizeof(uint16_t));
+    std::memcpy(&req.request_code, buffer.data(), sizeof(uint16_t));
     req.request_code = ntohs(req.request_code);
     position += sizeof(uint16_t);
-    
-    memcpy(&req.recipient, buffer + position, sizeof(uint8_t[RECIPIENT_SIZE]));
-    position += sizeof(uint8_t[RECIPIENT_SIZE]);
-    
-    memcpy(&req.amount, buffer + position,sizeof(uint32_t));
+
+    std::memcpy(&req.recipient, buffer.data() + position, sizeof(uint8_t) * RECIPIENT_SIZE);
+    position += sizeof(uint8_t) * RECIPIENT_SIZE;
+
+    std::memcpy(&req.amount, buffer.data() + position, sizeof(uint32_t));
     req.amount = ntohl(req.amount);
 
     return req;

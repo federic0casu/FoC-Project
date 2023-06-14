@@ -16,19 +16,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#include "../Packet/List.hpp"
-#include "../Packet/ClientReq.hpp"
-#include "../Generic/Codes.hpp"
-#include "../Generic/Utility.hpp"
-
-
-struct jobs {
-    std::vector<int> socket_queue;
-    std::atomic_bool stop;
-    std::mutex socket_mutex;
-    std::condition_variable socket_cv;
-};
-typedef struct jobs jobs_t;
+#include "Worker.hpp"
 
 
 class Server {
@@ -37,7 +25,6 @@ public:
     Server(int port, int n_workers, int backlog, volatile sig_atomic_t* g_signal_flag);
     ~Server();
     void accept_connections();
-    void set_signal_flag(int flag);
 
 private:
     int port;               // Port used to listen client's requests.
@@ -46,21 +33,24 @@ private:
     int n_workers;          // Number of workers (threads).
     sockaddr_in address;    // Server's address.
     jobs_t jobs;            // Shared structure used to share task among the workers. 
+    
     std::vector<std::thread> threads;
+    std::vector<Worker*>     workers;
 
     volatile sig_atomic_t* g_signal_flag;
 
     int  create_socket();   // To create the listener socket.
     void bind_socket();     // To bind the listener socket.   
     void listen_socket();   // To listen the incoming connection (using listener socket).
-    void worker(int);       // Method called by workers.
-   
-    ClientReq handle_request(int);
-
-    void balance(int, int);
-    void transfer(int, int);
-    void list(int, int);
     
-    void send_to_client(int, uint8_t*, ssize_t);
-    void recv_from_client(int, uint8_t*, ssize_t);
+    //void worker(int);       // Method called by workers.
+   
+    //ClientReq handle_request(int);
+
+    //void balance(int, int);
+    //void transfer(int, int);
+    //void list(int, int);
+    
+    //void send_to_client(int, uint8_t*, ssize_t);
+    //void recv_from_client(int, uint8_t*, ssize_t);
 };

@@ -19,8 +19,8 @@ public:
     Client(const std::string& server_ip, int server_port);
     ~Client();
     void connect_to_server();
-    void send_to_server(uint8_t* buffer, ssize_t buffer_size);
-    void recv_from_server(uint8_t* buffer, ssize_t buffer_size);
+    void send_to_server(const std::vector<uint8_t>& buffer);
+    void recv_from_server(std::vector<uint8_t>& buffer);
     
     void balance();
     void transfer();
