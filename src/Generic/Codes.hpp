@@ -1,11 +1,7 @@
-<<<<<<< HEAD
-#define CODE_BALANCE '1'
-#define CODE_TRANSFER 2
-#define CODE_LIST 3
+#define RECIPIENT_SIZE	32
 
-#define REQUEST_PACKET_SIZE 37
-#define BALANCE_RESPONSE_PACKET_SIZE 8
-=======
+#define REQUEST_PACKET_SIZE sizeof(uint16_t) + sizeof(uint8_t[RECIPIENT_SIZE]) + sizeof(uint32_t)
+
 #define CODE_BALANCE_REQUEST  	0x01
 #define CODE_TRANSFER_REQUEST 	0x02
 #define CODE_LIST_REQUEST    	0x03
@@ -14,4 +10,7 @@
 #define CODE_TRANSFER_RESPONSE 	0x05
 #define CODE_LIST_RESPONSE_1 	0x06
 #define CODE_LIST_RESPONSE_2 	0x07
->>>>>>> 2af8dcf76eb6292b414235e1a4b45a66680783e0
+
+#define BALANCE_RESPONSE_SIZE	8
+#define LIST_RESPONSE_1_SIZE	sizeof(uint16_t) + sizeof(uint32_t)
+#define LIST_RESPONSE_2_SIZE	sizeof(uint16_t) + sizeof(uint8_t[RECIPIENT_SIZE]) + sizeof(uint32_t) + sizeof(uint32_t)

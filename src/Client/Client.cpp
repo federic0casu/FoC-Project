@@ -27,19 +27,80 @@ void Client::connect_to_server()
     std::cout << "Connected to the server." << std::endl;
 }
 
-bool Client::list()
+void Client::balance()
 {
     try {
-        ;
+        uint8_t buffer[RECIPIENT_SIZE] = "PADDiNG_PADDiNG_PADDiNG_PADDiNG";
+        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, &buffer[0]);
+
+        #ifdef DEBUG
+        std::cout << "[1] balance: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        balance_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] balance.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, balance_request.get_size());
     }
     catch(std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
-        return false;
     }
-    return true;
 }
 
-void Client::send_to_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+void Client::transfer()
+{
+    try {
+        uint8_t buffer[RECIPIENT_SIZE] = "PaDDING_PaDDING_PaDDING_PaDDING";
+        ClientReq transfer_request(CODE_TRANSFER_REQUEST, 0, &buffer[0]);
+
+        #ifdef DEBUG
+        std::cout << "[1] transfer: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        transfer_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] transfer.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, transfer_request.get_size());
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
+
+void Client::list()
+{
+    try {
+        uint8_t buffer[RECIPIENT_SIZE] = "PADDING_PADDING_PADDING_PADDING";
+        ClientReq list_request(CODE_LIST_REQUEST, 0, &buffer[0]);
+
+        #ifdef DEBUG
+        std::cout << "[1] list: " << buffer << std::endl;
+        #endif
+
+        uint8_t to_send[REQUEST_PACKET_SIZE];
+        list_request.serialize(to_send);
+
+        #ifdef DEBUG
+        std::cout << "[2] list.serialize: " << to_send << std::endl;
+        #endif
+
+        send_to_server(to_send, list_request.get_size());
+    }
+    catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+
+void Client::send_to_server(uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_sent = 0;
 
@@ -57,7 +118,7 @@ void Client::send_to_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
     }
 }
 
-void Client::recv_from_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size)
+void Client::recv_from_server(uint8_t* buffer, ssize_t buffer_size)
 {
     ssize_t total_bytes_received = 0;
 

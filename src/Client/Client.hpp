@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 
 #include "../Packet/List.hpp"
+#include "../Packet/ClientReq.hpp"
+
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
 
@@ -17,10 +19,12 @@ public:
     Client(const std::string& server_ip, int server_port);
     ~Client();
     void connect_to_server();
-    void send_to_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size);
-    void recv_from_server(int sock_fd, uint8_t* buffer, ssize_t buffer_size);
+    void send_to_server(uint8_t* buffer, ssize_t buffer_size);
+    void recv_from_server(uint8_t* buffer, ssize_t buffer_size);
     
-    bool list();        // To get list of transactions.
+    void balance();
+    void transfer();
+    void list();        // To get list of transactions.
 
 private:
     int sock_fd;
