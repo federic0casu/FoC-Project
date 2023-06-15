@@ -6,6 +6,8 @@
 #include <cerrno>
 #include <csignal>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
@@ -29,12 +31,24 @@ struct jobs {
 };
 typedef struct jobs jobs_t;
 
+struct row_data {
+    std::string dest;
+    int amount;
+    long timestamp;
+
+    row_data() {}
+
+    row_data(const std::string& destination, int amt, long ts) 
+        : dest(destination), amount(amt), timestamp(ts) {}
+};
+typedef struct row_data row_data_t;
+
 #define SESSION_KEY_LENGHT 256
 
 class Worker {
 
 public:
-    Worker(int n_workers, jobs_t* jobs);
+    Worker(jobs_t* jobs);
 
     // Thread logic
     void Run();
@@ -45,15 +59,16 @@ public:
     
     // Worker Logic
     ClientReq HandleRequest();
-    void List();
+    void List_();
     void Transfer();
     void Balance();
 private:
     uint8_t hmac_key[SESSION_KEY_LENGHT];
     uint8_t session_key[SESSION_KEY_LENGHT];
     
-    int n_workers;
-    int thread_id;
     int client_socket;
     jobs_t* jobs;
+
+    std::vector<row_data_t> ListByUsername(const std::string& filename);
+    void AppendTransactionByUsername(const std::string& filename, const row_data_t& row);
 };

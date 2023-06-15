@@ -1,17 +1,13 @@
 #include "Worker.hpp"
 
-Worker::Worker(int n_workers, jobs_t* jobs) 
+Worker::Worker(jobs_t* jobs) 
 {
-    this->n_workers = n_workers;
     this->jobs = jobs;
 }
 
 void Worker::Run() 
 {
     while (true) {
-        std::hash<std::thread::id> hasher;
-        thread_id = static_cast<int>(hasher(std::this_thread::get_id())) % n_workers;
-        
         {
             std::unique_lock<std::mutex> lock(jobs->socket_mutex);
             jobs->socket_cv.wait(lock, [&]() { return !jobs->socket_queue.empty() || jobs->stop; });
@@ -19,7 +15,7 @@ void Worker::Run()
             if (jobs->stop) 
             {
                 #ifdef DEBUG
-                std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> stop" << std::endl;
+                std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> stop" << std::endl;
                 #endif
                 return;
             }
@@ -29,7 +25,7 @@ void Worker::Run()
         }
 
         #ifdef DEBUG
-        std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET 
+        std::cout << BLUE_BOLD << "[WORKER]" << RESET 
                   << " >> Client connected (socket: "
                   << client_socket << ")." << std::endl;
         #endif
@@ -41,7 +37,7 @@ void Worker::Run()
                 request = HandleRequest();
 
                 #ifdef DEBUG
-                std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> ";
+                std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
                 std::cout << "Client " << client_socket << " -> " 
                         << request.request_code << ":" 
                         << request.recipient << ":" 
@@ -59,7 +55,7 @@ void Worker::Run()
                         break;
                     }
                     case CODE_LIST_REQUEST: {
-                        List();
+                        List_();
                         break;
                     }
                     default: throw std::runtime_error("\033[1;31m[ERROR]\033[0m Bad format message (on request)");
@@ -68,7 +64,7 @@ void Worker::Run()
         }
         catch(std::runtime_error& e) {
             #ifdef DEBUG
-            std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> ";
+            std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
             #endif
             std::cerr << e.what() << std::endl;
             close(client_socket);
@@ -79,7 +75,9 @@ void Worker::Run()
         }
 
         #ifdef DEBUG
-        std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> Client disconnected (socket: " << client_socket << ")." << std::endl;
+        std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> " 
+                << "Client disconnected (socket: " 
+                << client_socket << ")." << std::endl;
         #endif
     }
 
@@ -98,24 +96,54 @@ ClientReq Worker::HandleRequest()
 void Worker::Balance()
 {
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> balance (socket: " << client_socket << ")." << std::endl;
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+            << "balance (socket: " 
+            << client_socket << ")." << std::endl;
     #endif
-
 }
 
 void Worker::Transfer()
 {
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> transfer (socket: " << client_socket << ")." << std::endl;
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+            << "transfer (socket: " 
+            << client_socket << ")." << std::endl;
     #endif
-
 }
 
-void Worker::List()
+void Worker::List_()
 {
-    #ifdef DEBUG
-    std::cout << BLUE_BOLD << "THREAD[" << thread_id << "]" << RESET << " >> list (socket: " << client_socket << ")." << std::endl;
-    #endif
+    // TEST
+    //const row_data_t tmp("Bob", 1, std::time(nullptr)); 
+    //AppendTransactionByUsername("transactions/Alice.txt", tmp);
+    // END TEST
+
+    std::vector<row_data_t> list = ListByUsername("transactions/Alice.txt");
+    unsigned int n = list.size(); 
+    
+    List response(CODE_LIST_RESPONSE_1, n);
+    std::vector<uint8_t> buffer(LIST_RESPONSE_1_SIZE);
+    response.serialize(buffer);
+
+    Send(buffer);
+
+    buffer.clear();
+    buffer.resize(LIST_RESPONSE_2_SIZE);
+ 
+    for (row_data_t& transaction : list)
+    {
+        List response(CODE_LIST_RESPONSE_2, 
+                    transaction.amount, 
+                    reinterpret_cast<uint8_t*>(const_cast<char*>(transaction.dest.data())), 
+                    sizeof(uint8_t[USER_SIZE]), 
+                    reinterpret_cast<std::time_t>(transaction.timestamp));
+        response.serialize(buffer);
+
+        Send(buffer);
+
+        buffer.clear();
+        buffer.resize(LIST_RESPONSE_2_SIZE);
+    }
 }
 
 ssize_t Worker::Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size) {
@@ -159,4 +187,41 @@ ssize_t Worker::Send(const std::vector<uint8_t>& buffer) {
     }
 
     return total_bytes_sent;
+}
+
+std::vector<row_data_t> Worker::ListByUsername(const std::string& filename)
+{
+    std::vector<row_data_t> rows;
+    std::ifstream file(filename);
+
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open the file");
+
+    std::string line;
+    while (std::getline(file, line)) 
+    {
+        row_data_t row;
+        row.dest = "";
+        std::istringstream iss(line);
+        if (iss >> row.dest >> row.amount >> row.timestamp)
+            rows.push_back(row);
+        else
+            throw std::runtime_error("Failed to parse a line in the file");
+    }
+
+    file.close();
+    return rows;
+}
+
+
+void Worker::AppendTransactionByUsername(const std::string& filename, const row_data_t& row)
+{
+    std::ofstream file(filename, std::ios::app);
+
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open the file for appending");
+
+    file << row.dest << " " << row.amount << " " << row.timestamp << "\n";
+
+    file.close();
 }

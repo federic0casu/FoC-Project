@@ -1,24 +1,21 @@
 #include <ctime>
+#include <vector>
+#include <cstring>
+
 #include <string.h>
 #include <arpa/inet.h>
 
-#include <iostream>
-
-#define USER_SIZE   32
-#define BUFFER_SIZE sizeof(uint16_t) + sizeof(uint8_t[USER_SIZE]) + sizeof(uint32_t) + sizeof(std::time_t) 
+#define USER_SIZE   32 
 
 struct List {
-    uint16_t    code_response;
-    uint8_t*    dest = NULL;
-    uint32_t    amount;
+    uint16_t code_response;
+    uint32_t amount;
     std::time_t timestamp;
-    
-    List(uint16_t v1, uint32_t v2);
-    List(uint16_t v1, uint32_t v2, std::time_t v3);
-    List(uint16_t v1, uint32_t v2, uint8_t* c1, size_t c1_size, std::time_t v3);
-
-    ~List() { if(dest != NULL) delete[] dest; };
-    
-    void serialize(uint8_t* buffer);
-    static List deserialize(uint8_t* buffer);
+    uint8_t dest[USER_SIZE];
+ 
+    List(uint16_t code_response, uint32_t amount);
+    List(uint16_t code_response, uint32_t amount, std::time_t timestamp);
+    List(uint16_t code_response, uint32_t amount, uint8_t* username, size_t username_size, std::time_t timestamp);    
+    void serialize(std::vector<uint8_t>& buffer);
+    static List deserialize(const std::vector<uint8_t>& buffer);
 };

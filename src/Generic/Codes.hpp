@@ -12,5 +12,5 @@
 #define CODE_LIST_RESPONSE_2 	0x07
 
 #define BALANCE_RESPONSE_SIZE	8
-#define LIST_RESPONSE_1_SIZE	sizeof(uint16_t) + sizeof(uint32_t)
+#define LIST_RESPONSE_1_SIZE	sizeof(uint16_t) + sizeof(uint8_t[RECIPIENT_SIZE]) + sizeof(uint32_t) + sizeof(uint32_t)
 #define LIST_RESPONSE_2_SIZE	sizeof(uint16_t) + sizeof(uint8_t[RECIPIENT_SIZE]) + sizeof(uint32_t) + sizeof(uint32_t)

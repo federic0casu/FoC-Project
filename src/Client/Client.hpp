@@ -1,5 +1,7 @@
 #include <iostream>
 #include <string>
+#include <iomanip>
+#include <ctime>
 #include <cstring>
 #include <unistd.h>
 #include <stdexcept>
@@ -24,9 +26,11 @@ public:
     
     void balance();
     void transfer();
-    void list();        // To get list of transactions.
+    void list();
 
 private:
     int sock_fd;
     struct sockaddr_in server_address;
+
+    void print_formatted_date(std::time_t timestamp);
 };
