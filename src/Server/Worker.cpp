@@ -31,10 +31,12 @@ void Worker::Run()
         #endif
 
         try {
+            // Exchange session key
+
             ClientReq request;
             while(true) 
             {
-                request = HandleRequest();
+                request = RequestHandler();
 
                 #ifdef DEBUG
                 std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
@@ -47,18 +49,18 @@ void Worker::Run()
                 switch(request.request_code) 
                 {
                     case CODE_BALANCE_REQUEST: {
-                        Balance();
+                        BalanceHandler();
                         break;
                     }
                     case CODE_TRANSFER_REQUEST: {
-                        Transfer();
+                        TransferHandler();
                         break;
                     }
                     case CODE_LIST_REQUEST: {
-                        List_();
+                        ListHandler();
                         break;
                     }
-                    default: throw std::runtime_error("\033[1;31m[ERROR]\033[0m Bad format message (on request)");
+                    default: throw std::runtime_error("\033[1;31m[ERROR]\033[0m Bad format message (request_code not known)");
                 }
             }
         }
@@ -83,17 +85,35 @@ void Worker::Run()
 
 }
 
-ClientReq Worker::HandleRequest()
+ClientReq Worker::RequestHandler()
 {
-    std::vector<uint8_t> buffer;
-    buffer.resize(REQUEST_PACKET_SIZE);  // Resize the vector to the desired buffer size
+    std::vector<uint8_t> buffer(SessionMessage::get_size(REQUEST_PACKET_SIZE));
 
-    Receive(buffer, REQUEST_PACKET_SIZE);
+    Receive(buffer, SessionMessage::get_size(REQUEST_PACKET_SIZE));
 
-    return ClientReq::deserialize(buffer);
+    SessionMessage encrypted_request = SessionMessage::deserialize(buffer, REQUEST_PACKET_SIZE);
+    buffer.clear();
+
+    #ifdef DEBUG
+    std::cout << "Incoming encrypted message..." << std::endl;
+    encrypted_request.print();
+    #endif 
+
+    // TO REMOVE
+    std::vector<uint8_t> new_hmac_key(256, 0);
+    std::vector<uint8_t> new_session_key(256, 1);
+    // TO REMOVE
+
+    if(!encrypted_request.verify_HMAC(new_hmac_key.data()))
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m HMAC verification: FAILED.");
+
+    std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
+    encrypted_request.decrypt(new_session_key, plaintext);
+
+    return ClientReq::deserialize(plaintext);
 }
 
-void Worker::Balance()
+void Worker::BalanceHandler()
 {
     #ifdef DEBUG
     std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
@@ -102,7 +122,7 @@ void Worker::Balance()
     #endif
 }
 
-void Worker::Transfer()
+void Worker::TransferHandler()
 {
     #ifdef DEBUG
     std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
@@ -111,24 +131,32 @@ void Worker::Transfer()
     #endif
 }
 
-void Worker::List_()
+void Worker::ListHandler()
 {
-    // TEST
-    //const row_data_t tmp("Bob", 1, std::time(nullptr)); 
-    //AppendTransactionByUsername("transactions/Alice.txt", tmp);
-    // END TEST
-
     std::vector<row_data_t> list = ListByUsername("transactions/Alice.txt");
     unsigned int n = list.size(); 
     
     List response(CODE_LIST_RESPONSE_1, n);
-    std::vector<uint8_t> buffer(LIST_RESPONSE_1_SIZE);
-    response.serialize(buffer);
+    std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE);
+    response.serialize(plaintext);
+    
+    // TO REMOVE
+    std::vector<uint8_t> new_hmac_key(256, 0);
+    std::vector<uint8_t> new_session_key(256, 1);
+    // TO REMOVE
 
-    Send(buffer);
+    SessionMessage encrypted_response(new_session_key, new_hmac_key, plaintext);
+    
+    #ifdef DEBUG
+    std::cout << "Sending encrypted message..." << std::endl;
+    encrypted_response.print();
+    #endif
 
-    buffer.clear();
-    buffer.resize(LIST_RESPONSE_2_SIZE);
+    std::vector<uint8_t> to_send = encrypted_response.serialize();
+    Send(to_send);
+
+    plaintext.clear();
+    plaintext.resize(LIST_RESPONSE_2_SIZE);
  
     for (row_data_t& transaction : list)
     {
@@ -137,12 +165,12 @@ void Worker::List_()
                     reinterpret_cast<uint8_t*>(const_cast<char*>(transaction.dest.data())), 
                     sizeof(uint8_t[USER_SIZE]), 
                     reinterpret_cast<std::time_t>(transaction.timestamp));
-        response.serialize(buffer);
+        response.serialize(plaintext);
 
-        Send(buffer);
+        Send(plaintext);
 
-        buffer.clear();
-        buffer.resize(LIST_RESPONSE_2_SIZE);
+        plaintext.clear();
+        plaintext.resize(LIST_RESPONSE_2_SIZE);
     }
 }
 

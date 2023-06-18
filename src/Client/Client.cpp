@@ -30,16 +30,30 @@ void Client::connect_to_server()
 void Client::balance()
 {
     try {
-        unsigned char buffer[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
-        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, buffer);
+
+        // TO REMOVE
+        std::vector<uint8_t> hmac_key(256, 0);
+        std::vector<uint8_t> session_key(256, 1);
+        // TO REMOVE
+
+        unsigned char padding[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding);
 
         #ifdef DEBUG
         std::cout << "[1] balance ->\t" << balance_request.request_code << ":" << balance_request.recipient << ":" << balance_request.amount << std::endl;
+        #endif 
+
+        std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
+        balance_request.serialize(plaintext);
+
+        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+
+        #ifdef DEBUG
+        std::cout << "Sending encrypted message..." << std::endl;
+        encrypted_request.print();
         #endif
 
-        std::vector<uint8_t> to_send;
-        to_send.resize(REQUEST_PACKET_SIZE);  // Resize the vector to the desired buffer size
-        balance_request.serialize(to_send);
+        std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
     }
     catch(std::runtime_error& e) {
@@ -50,16 +64,30 @@ void Client::balance()
 void Client::transfer()
 {
     try {
-        unsigned char buffer[] = "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT";
-        ClientReq transfer_request(CODE_TRANSFER_REQUEST, 0, buffer);
+
+        // TO REMOVE
+        std::vector<uint8_t> hmac_key(256, 0);
+        std::vector<uint8_t> session_key(256, 1);
+        // TO REMOVE
+
+        unsigned char padding[] = "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT";
+        ClientReq transfer_request(CODE_TRANSFER_REQUEST, 0, padding);
 
         #ifdef DEBUG
         std::cout << "[1] transfer ->\t" << transfer_request.request_code << ":" << transfer_request.recipient << ":" << transfer_request.amount << std::endl;
         #endif
 
-        std::vector<uint8_t> to_send;
-        to_send.resize(REQUEST_PACKET_SIZE);  // Resize the vector to the desired buffer size
-        transfer_request.serialize(to_send);
+        std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
+        transfer_request.serialize(plaintext);
+
+        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        
+        #ifdef DEBUG
+        std::cout << "Sending encrypted message..." << std::endl;
+        encrypted_request.print();
+        #endif
+
+        std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
     }
     catch(std::runtime_error& e) {
@@ -71,24 +99,53 @@ void Client::transfer()
 void Client::list()
 {
     try {
+
+        // TO REMOVE
+        std::vector<uint8_t> hmac_key(256, 0);
+        std::vector<uint8_t> session_key(256, 1);
+        // TO REMOVE
+
         /*--------------- STEP 1: send a list request (request_code: 0x03) ---------------*/
-        unsigned char buffer[] = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
-        ClientReq list_request(CODE_LIST_REQUEST, 0, buffer);
+        unsigned char padding[] = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
+        ClientReq list_request(CODE_LIST_REQUEST, 0, padding);
 
         #ifdef DEBUG
         std::cout << "[1] list ->\t" << list_request.request_code << ":" << list_request.recipient << ":" << list_request.amount << std::endl;
         #endif
 
-        std::vector<uint8_t> to_send;
-        to_send.resize(REQUEST_PACKET_SIZE);  // Resize the vector to the desired buffer size
-        list_request.serialize(to_send);
+        std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
+        list_request.serialize(plaintext);
+        
+        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        
+        #ifdef DEBUG
+        std::cout << "Sending encrypted message..." << std::endl;
+        encrypted_request.print();
+        #endif
+
+        std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
+
         /*--------------------------------------------------------------------------------*/
 
         /*---------- STEP 2: receive number of transactions (response_code 0x06) ---------*/
-        std::vector<uint8_t> to_recv(LIST_RESPONSE_1_SIZE, 0);
+        std::vector<uint8_t> to_recv(SessionMessage::get_size(LIST_RESPONSE_1_SIZE), 0);
         recv_from_server(to_recv);
-        List response_1 = List::deserialize(to_recv);
+
+        SessionMessage encrypted_response_1 = SessionMessage::deserialize(to_recv, LIST_RESPONSE_1_SIZE);
+
+        #ifdef DEBUG
+        std::cout << "Incoming encrypted message..." << std::endl;
+        encrypted_response_1.print();
+        #endif 
+
+        if(!encrypted_response_1.verify_HMAC(hmac_key.data()))
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m HMAC verification: FAILED.");
+
+        plaintext.resize(LIST_RESPONSE_1_SIZE);
+        encrypted_response_1.decrypt(session_key, plaintext);
+
+        List response_1 = List::deserialize(plaintext);
 
         #ifdef DEBUG
         std::cout << "[2] list ->\t" << response_1.code_response << ":" 

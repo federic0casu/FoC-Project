@@ -20,8 +20,12 @@
 
 #include "../Packet/List.hpp"
 #include "../Packet/ClientReq.hpp"
+#include "../Packet/SessionMessage.hpp"
+
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
+
+#define SESSION_KEY_LENGHT 256
 
 struct jobs {
     std::vector<int> socket_queue;
@@ -43,8 +47,6 @@ struct row_data {
 };
 typedef struct row_data row_data_t;
 
-#define SESSION_KEY_LENGHT 256
-
 class Worker {
 
 public:
@@ -58,10 +60,10 @@ public:
     ssize_t Send(const std::vector<uint8_t>& buffer);
     
     // Worker Logic
-    ClientReq HandleRequest();
-    void List_();
-    void Transfer();
-    void Balance();
+    ClientReq RequestHandler();
+    void ListHandler();
+    void TransferHandler();
+    void BalanceHandler();
 private:
     uint8_t hmac_key[SESSION_KEY_LENGHT];
     uint8_t session_key[SESSION_KEY_LENGHT];
