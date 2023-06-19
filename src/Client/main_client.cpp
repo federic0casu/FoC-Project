@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
         Client client(server_ip, atoi(argv[1]));
         client.connect_to_server();
 
-        // KEY EXCHANGE and AUTHENTICATION
+        client.handshake();
 
         // test
         client.balance();

@@ -4,9 +4,6 @@
 #include <cstring>
 #include <openssl/rand.h>
 
-#include "../Security/AES_CBC.hpp"
-#include "../Security/HMAC.hpp"
-
 // ---------------------------------- SESSION MESSAGE ----------------------------------
 
 struct SessionMessage {

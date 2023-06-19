@@ -3,6 +3,9 @@
 Worker::Worker(jobs_t* jobs) 
 {
     this->jobs = jobs;
+    this->iv.resize(AES_BLOCK_SIZE);
+    this->hmac_key.resize(SESSION_KEY_LENGHT);
+    this->session_key.resize(SESSION_KEY_LENGHT);
 }
 
 void Worker::Run() 
@@ -31,7 +34,7 @@ void Worker::Run()
         #endif
 
         try {
-            // Exchange session key
+            Handshake();
 
             ClientReq request;
             while(true) 
@@ -95,20 +98,16 @@ ClientReq Worker::RequestHandler()
     buffer.clear();
 
     #ifdef DEBUG
-    std::cout << "Incoming encrypted message..." << std::endl;
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+              << "Incoming encrypted message..." << std::endl;
     encrypted_request.print();
     #endif 
 
-    // TO REMOVE
-    std::vector<uint8_t> new_hmac_key(256, 0);
-    std::vector<uint8_t> new_session_key(256, 1);
-    // TO REMOVE
-
-    if(!encrypted_request.verify_HMAC(new_hmac_key.data()))
+    if(!encrypted_request.verify_HMAC(this->hmac_key.data()))
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m HMAC verification: FAILED.");
 
     std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
-    encrypted_request.decrypt(new_session_key, plaintext);
+    encrypted_request.decrypt(this->session_key, plaintext);
 
     return ClientReq::deserialize(plaintext);
 }
@@ -139,16 +138,12 @@ void Worker::ListHandler()
     List response(CODE_LIST_RESPONSE_1, n);
     std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE);
     response.serialize(plaintext);
-    
-    // TO REMOVE
-    std::vector<uint8_t> new_hmac_key(256, 0);
-    std::vector<uint8_t> new_session_key(256, 1);
-    // TO REMOVE
 
-    SessionMessage encrypted_response(new_session_key, new_hmac_key, plaintext);
+    SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
     
     #ifdef DEBUG
-    std::cout << "Sending encrypted message..." << std::endl;
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+              << "Sending encrypted message..." << std::endl;
     encrypted_response.print();
     #endif
 
@@ -167,11 +162,207 @@ void Worker::ListHandler()
                     reinterpret_cast<std::time_t>(transaction.timestamp));
         response.serialize(plaintext);
 
-        Send(plaintext);
+        SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
+    
+        #ifdef DEBUG
+        std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+                    << "Sending encrypted message..." << std::endl;
+        encrypted_response.print();
+        #endif
+
+        std::vector<uint8_t> to_send = encrypted_response.serialize();
+        Send(to_send);
 
         plaintext.clear();
         plaintext.resize(LIST_RESPONSE_2_SIZE);
     }
+}
+
+void Worker::Handshake() {
+
+    /* ---------------------- RECEIVING M1 ----------------------*/
+    
+    // Allocate a buffer to receive M1 message.
+    std::vector<uint8_t> handshake_m1(HandshakeM1::GetSize());
+    Receive(handshake_m1, HandshakeM1::GetSize());
+
+    // Deserialize M1
+    HandshakeM1 m1 = HandshakeM1::Deserialize(handshake_m1.data());
+
+    #ifdef DEBUG
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+              << "Incoming encrypted message..." << std::endl;
+    m1.print();
+    #endif
+
+    std::string server_pkey_path = "../res/private_keys/server_privkey.pem";
+    
+    // extract the server private key
+    BIO * bp;
+    bp = BIO_new_file(server_pkey_path.c_str(), "r");
+    if (!bp) 
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to open private key file.");
+
+    EVP_PKEY* private_key = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
+    BIO_free(bp); 
+    if (!private_key) 
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to read private key.");
+
+    DiffieHellman dh;
+    EVP_PKEY* ephemeral_key = dh.generateEphemeralKey();
+    EVP_PKEY* peer_ephemeral_key = DiffieHellman::deserializeKey(m1.ephemeral_key, m1.key_size);
+
+    /* ---------------------- SESSION KEYS GENERATION ----------------------*/
+
+    // generate the shared secret
+    uint8_t* secret = nullptr;
+    size_t secret_size;
+    int res = dh.generateSharedSecret(ephemeral_key, peer_ephemeral_key, secret, secret_size);
+    EVP_PKEY_free(peer_ephemeral_key);
+    if (res < 0) 
+    {
+        std::memset(reinterpret_cast<void*>(secret), 0, secret_size);
+        EVP_PKEY_free(ephemeral_key);
+        EVP_PKEY_free(private_key);
+        // EVP_PKEY_free(user_public_key);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to generate shared secret.");
+    }
+    
+    // generate the session and the hmac keys from the shared secret
+    uint8_t* keys = nullptr;
+    uint32_t keys_size;
+
+    try {
+        SHA_512::generate(secret, secret_size, keys, keys_size);
+    } catch(...) {
+        std::memset(reinterpret_cast<void*>(secret), 0, secret_size);
+        EVP_PKEY_free(ephemeral_key);
+        EVP_PKEY_free(private_key);
+        throw;
+    }
+
+    std::memcpy(this->session_key.data(), keys, (keys_size/2) * sizeof(uint8_t));
+    std::memcpy(this->hmac_key.data(), keys + ((keys_size/2) * sizeof(uint8_t)), HMAC_DIGEST_SIZE * sizeof(uint8_t));
+    std::memset(reinterpret_cast<void*>(keys), 0, keys_size);
+    delete[] keys;
+    std::memset(reinterpret_cast<void*>(secret), 0, secret_size);
+    delete[] secret;
+
+    /* ----------------------SERVER  CERTIFICATE----------------------*/
+
+    string certificate_filename = "../res/cert/server_certificate.pem";
+    CertificateStore* certificate_store = CertificateStore::getStore();
+    X509* certificate = certificate_store->load(certificate_filename);
+
+    uint8_t *serialized_certificate = nullptr;
+    int serialized_certificate_size = 0;
+    CertificateStore::serializeCertificate(certificate, serialized_certificate, serialized_certificate_size);
+    X509_free(certificate);
+    
+    /* ---------------------- SERIALIZE OWN EPHEMERAL KEY ----------------------*/
+    
+    uint8_t* serialized_ephemeral_key = nullptr;
+    int serialized_ephemeral_key_size;
+    res = DiffieHellman::serializeKey(ephemeral_key, serialized_ephemeral_key, serialized_ephemeral_key_size);
+    EVP_PKEY_free(ephemeral_key);
+    if (res < 0) {
+        EVP_PKEY_free(private_key);
+        std::memset(reinterpret_cast<void*>(serialized_certificate), 0, serialized_certificate_size);
+        delete[] serialized_certificate;
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
+        delete[] serialized_ephemeral_key;
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to serialize ephemeral key.");
+    }
+
+    // prepare <g^a,g^b>
+    int ephemeral_keys_buffer_size = m1.key_size + serialized_ephemeral_key_size;
+    uint8_t* ephemeral_keys_buffer = new uint8_t[ephemeral_keys_buffer_size];
+    std::memcpy(ephemeral_keys_buffer, m1.ephemeral_key, m1.key_size * sizeof(uint8_t));
+    std::memcpy(ephemeral_keys_buffer + m1.key_size * sizeof(uint8_t), serialized_ephemeral_key, serialized_ephemeral_key_size);
+
+    // calculate digest(<g^a,g^b>)_s
+    unsigned char *_signature;
+    unsigned int signature_size;
+    DigitalSignature::generate(ephemeral_keys_buffer, ephemeral_keys_buffer_size, _signature, signature_size, private_key);
+    EVP_PKEY_free(private_key);
+
+    // calculate {<g^a,g^b>_s}_Ksess
+    std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
+    std::vector<uint8_t> signature(signature_size);
+    std::vector<uint8_t> ciphertext;
+    std::memcpy(signature.data(), _signature, signature_size);
+    AES_CBC* encryptor = new AES_CBC(ENCRYPT, session_key);
+    encryptor->run(signature, ciphertext, iv);
+    std::memset(reinterpret_cast<void*>(_signature), 0, signature_size * sizeof(uint8_t));
+    signature.clear();
+    delete[] _signature;
+
+    HandshakeM2 m2(serialized_ephemeral_key, serialized_ephemeral_key_size, iv.data(), ciphertext.data(), serialized_certificate, serialized_certificate_size);
+    uint8_t *_serialized_packet = new uint8_t[HandshakeM2::getSize()];
+    _serialized_packet = m2.serialize();
+    std::vector<uint8_t> serialized_packet(HandshakeM2::getSize());
+    std::memcpy(serialized_packet.data(), _serialized_packet, HandshakeM2::getSize() * sizeof(uint8_t));
+    Send(serialized_packet);
+    delete[] _serialized_packet;
+    delete[] serialized_certificate;
+    delete[] serialized_ephemeral_key;
+    if (res < 0) {
+        delete[] ephemeral_keys_buffer;
+        return ;
+    }
+
+    serialized_packet.clear();
+    serialized_packet.resize(HandshakeM3::getSize());
+    
+    try {
+        Receive(serialized_packet, HandshakeM3::getSize());
+    } catch(...) {
+        delete[] _serialized_packet;
+        throw;
+    }
+
+    _serialized_packet = new uint8_t[HandshakeM3::getSize()];
+    std::memcpy(_serialized_packet, serialized_packet.data(), HandshakeM3::getSize() * sizeof(uint8_t));
+    HandshakeM3 m3 = HandshakeM3::deserialize(_serialized_packet);
+    delete[] _serialized_packet;
+
+    std::cout << 1 << std::endl;
+
+    // decrypt the encrypted digital signature
+    std::vector<uint8_t> decrypted_signature;
+    AES_CBC* decryptor = new AES_CBC(DECRYPT, session_key);
+    iv.clear();
+    iv.resize(AES_BLOCK_SIZE * sizeof(uint8_t));
+    std::memcpy(iv.data(), m3.iv, AES_BLOCK_SIZE * sizeof(uint8_t));
+    std::vector<uint8_t> encrypted_signature(ENCRYPTED_SIGNATURE_SIZE * sizeof(uint8_t));
+    std::memcpy(encrypted_signature.data(), m3.encrypted_signature, ENCRYPTED_SIGNATURE_SIZE * sizeof(uint8_t));
+    decryptor->run(encrypted_signature, decrypted_signature, iv);
+    delete decryptor;
+
+    std::cout << 2 << std::endl;
+
+    char file_name[sizeof("../res/public_keys/") + sizeof(m1.username) + sizeof("_pubkey.pem")];
+    std::sprintf(file_name, "../res/public_keys/%s_pubkey.pem", m1.username);
+    bp = BIO_new_file(reinterpret_cast<const char*>(file_name), "r");
+    EVP_PKEY* user_public_key = nullptr;
+    if (!bp) 
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to open client's public key."); 
+    else {
+        std::sprintf(reinterpret_cast<char*>(this->username), "%s", m1.username);
+        user_public_key = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+    }
+    BIO_free(bp);
+
+    std::cout << 3 << std::endl;
+
+    // qua invece che controllare la signature con le ephemeral devo controllare con la password cifrata che ho preso dall'archivio dell'utente
+    bool signature_verification = DigitalSignature::verify(ephemeral_keys_buffer, ephemeral_keys_buffer_size, decrypted_signature.data(), decrypted_signature.size(), user_public_key);
+    EVP_PKEY_free(user_public_key);
+    delete[] ephemeral_keys_buffer;
+    if (signature_verification)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Invalid signature.");
+
+    std::cout << 4 << std::endl;
 }
 
 ssize_t Worker::Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size) {

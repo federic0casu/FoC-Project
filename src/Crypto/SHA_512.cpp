@@ -1,9 +1,15 @@
 #include "SHA_512.hpp"
 
+#include <iostream>
+
 void SHA_512::generate(const unsigned char* input_buffer, size_t input_buffer_size, unsigned char*& digest, unsigned int& digest_size) 
 {
+    digest = new uint8_t[EVP_MD_size(EVP_sha512())];
+    if (!digest)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m SHA_512::generate() >> Failed to allocate digest.");
+
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    
+
     if (!ctx)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m SHA_512::generate() >> Failed to create EVP_MD_CTX.");
 

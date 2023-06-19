@@ -21,7 +21,7 @@ AES_CBC::~AES_CBC()
 void AES_CBC::initializeEncrypt()
 {
     iv.resize(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
-    const auto block_size = EVP_CIPHER_block_size(EVP_aes_256_cbc());
+    const long unsigned int block_size = EVP_CIPHER_block_size(EVP_aes_256_cbc());
     
     // Seed OpenSSL PRNG
     RAND_poll();

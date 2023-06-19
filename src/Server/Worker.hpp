@@ -1,4 +1,5 @@
 #include <mutex>
+#include <string>
 #include <atomic>
 #include <thread>
 #include <vector>
@@ -18,8 +19,11 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
+#include "../Crypto/DiffieHellman.hpp"
+
 #include "../Packet/List.hpp"
 #include "../Packet/ClientReq.hpp"
+#include "../Packet/Handshake.hpp"
 #include "../Packet/SessionMessage.hpp"
 
 #include "../Generic/Codes.hpp"
@@ -55,21 +59,27 @@ public:
     // Thread logic
     void Run();
     
+private:
+    std::vector<uint8_t> iv;
+    std::vector<uint8_t> hmac_key;
+    std::vector<uint8_t> session_key;
+    uint8_t username[USERNAME_SIZE];
+    
+    int client_socket;
+    jobs_t* jobs;
+
     // Communication methods
     ssize_t Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size);
     ssize_t Send(const std::vector<uint8_t>& buffer);
     
+    // Key exchange protocol
+    void Handshake();
+
     // Worker Logic
     ClientReq RequestHandler();
     void ListHandler();
     void TransferHandler();
     void BalanceHandler();
-private:
-    uint8_t hmac_key[SESSION_KEY_LENGHT];
-    uint8_t session_key[SESSION_KEY_LENGHT];
-    
-    int client_socket;
-    jobs_t* jobs;
 
     std::vector<row_data_t> ListByUsername(const std::string& filename);
     void AppendTransactionByUsername(const std::string& filename, const row_data_t& row);

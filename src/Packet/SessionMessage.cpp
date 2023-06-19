@@ -1,3 +1,6 @@
+#include "../Crypto/HMAC.hpp"
+#include "../Crypto/AES_CBC.hpp"
+
 #include "SessionMessage.hpp"
 
 SessionMessage::SessionMessage(int ciphertext_size)

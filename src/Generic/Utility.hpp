@@ -5,4 +5,6 @@
 
 #define RECIPIENT_SIZE 32
 
+#define SESSION_KEY_LENGHT 256
+
 #define DEBUG 0
