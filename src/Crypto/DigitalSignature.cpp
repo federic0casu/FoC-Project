@@ -3,7 +3,6 @@
 
 #include "DigitalSignature.hpp"
 
-using namespace std;
 
 void DigitalSignature::generate(unsigned char* input_buffer, 
                                 long int input_buffer_size, 
@@ -38,7 +37,7 @@ bool DigitalSignature::verify(unsigned char* input_buffer,
 
     if (res != 1) {
         if (res != 0)
-            cerr << "[-] (DigitalSignature) Failed to verify signature" << endl;
+            std::cerr << "[-] (DigitalSignature) Failed to verify signature" << std::endl;
         return false;
     }
 

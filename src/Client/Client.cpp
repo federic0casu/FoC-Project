@@ -287,11 +287,14 @@ int Client::handshake() {
 
     // questa parte va modificata mettendo la password 
     // calculate <pass>_c
-    unsigned char* signature = nullptr;
-    unsigned int signature_size;
-    DigitalSignature::generate(ephemeral_keys_buffer, ephemeral_keys_buffer_size, signature, signature_size, m_long_term_key);
-    std::vector<uint8_t> signature_vector(signature_size);
-    std::memcpy(signature_vector.data(), signature, signature_size);
+    uint8_t* signature = nullptr;
+    uint32_t signature_size = 0;
+    try {
+        DigitalSignature::generate(ephemeral_keys_buffer, ephemeral_keys_buffer_size, signature, signature_size, m_long_term_key);
+    } catch(...) {
+        throw;
+    }
+    std::vector<uint8_t> signature_vector(signature, signature + (signature_size / sizeof(uint8_t)));
 
     // calculate {<g^a,g^b>_s}_Ksess
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
@@ -321,10 +324,17 @@ int Client::handshake() {
 
     // decrypt the encrypted digital signature
     std::vector<uint8_t> decrypted_signature;
-    std::vector<uint8_t> encrypted_signature(144 * sizeof(uint8_t));
-    std::memcpy(encrypted_signature.data(), m2.encrypted_signature, 144 * sizeof(uint8_t));
-    std::vector<uint8_t> signature_iv(sizeof(uint8_t) * AES_BLOCK_SIZE);
-    std::memcpy(signature_iv.data(), m2.iv, sizeof(uint8_t) * AES_BLOCK_SIZE);
+    std::vector<uint8_t> encrypted_signature(m2.encrypted_signature, m2.encrypted_signature + (sizeof(m2.encrypted_signature) / sizeof(uint8_t)));
+    std::vector<uint8_t> signature_iv(m2.iv, m2.iv + (sizeof(m2.iv) / sizeof(uint8_t)));
+
+    #ifdef DEBUG
+    if (!std::equal(encrypted_signature.begin(), encrypted_signature.end(), std::begin(m2.encrypted_signature), std::end(m2.encrypted_signature)))
+        std::cout << "std::vector<uint8_t> encrypted_signature != m2.encrypted_signature" << std::endl;
+
+    if (!std::equal(signature_iv.begin(), signature_iv.end(), std::begin(m2.iv), std::end(m2.iv)))
+        std::cout << "std::vector<uint8_t> signature_iv != m2.iv" << std::endl;
+    #endif
+
     AES_CBC* decryptor = new AES_CBC(DECRYPT, session_key);
     decryptor->run(encrypted_signature, decrypted_signature, signature_iv);
     delete decryptor;
@@ -363,7 +373,7 @@ int Client::handshake() {
     ciphertext.clear();
     iv.clear();
 
-    #ifdef DEBUG
+    #ifdef DEBUG    
     std::cout << "END HANDSHAKE" << std::endl;
     #endif 
 }
