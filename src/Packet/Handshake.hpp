@@ -27,15 +27,14 @@ struct HandshakeM1
 
     HandshakeM1() {}
 
-    HandshakeM1(const uint8_t *ephemeral_key, int key_size, const unsigned char* username)
+    HandshakeM1(uint8_t *ephemeral_key, int key_size, const unsigned char* username)
     {    
         this->key_size = (uint32_t) key_size;
 
-        std::memset(reinterpret_cast<void*>(this->ephemeral_key), 0, EPHEMERAL_KEY_SIZE);
-        std::memcpy(reinterpret_cast<void*>(this->ephemeral_key), reinterpret_cast<const void*>(ephemeral_key), this->key_size);
-
-        std::memset(reinterpret_cast<void*>(this->username), 0, sizeof(this->username));
-        std::memcpy(reinterpret_cast<void*>(this->username), reinterpret_cast<const void*>(username), sizeof(this->username));
+        std::memset(this->ephemeral_key, 0, EPHEMERAL_KEY_SIZE);
+        std::memcpy(this->ephemeral_key, ephemeral_key, this->key_size);
+        std::memset(this->username, 0, sizeof(this->username));
+        std::memcpy(this->username, username, sizeof(this->username));
     }
 
     void serialize(uint8_t* buffer)

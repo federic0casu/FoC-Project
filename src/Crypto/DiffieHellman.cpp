@@ -8,8 +8,8 @@
 
 using namespace std;
 
-DiffieHellman::DiffieHellman() 
-{
+DiffieHellman::DiffieHellman() {
+
     // p of the diffie hellman protocol
     static unsigned char dhp_2048[] = {
         0xDB, 0x53, 0x9C, 0x0B, 0xF0, 0xAE, 0x71, 0x24, 0x9B, 0xB8,
@@ -48,8 +48,10 @@ DiffieHellman::DiffieHellman()
     DH *dh = DH_new();
     BIGNUM *p, *g;
 
-    if (dh == NULL)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to create low level DH parameters structure");
+    if (dh == NULL){
+        cerr << "[-] (DiffieHellman) Failed to create low level DH parameters structure" << endl;
+        return;
+    }
 
     p = BN_bin2bn(dhp_2048, sizeof(dhp_2048), NULL);
     g = BN_bin2bn(dhg_2048, sizeof(dhg_2048), NULL);
@@ -58,37 +60,48 @@ DiffieHellman::DiffieHellman()
         BN_free(p);
         BN_free(g);
 
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to setup low level DH parameters structure");
+        cerr << "[-] (DiffieHellman) Failed to setup low level DH parameters structure" << endl;
+        return;
     }
 
     m_dh_parameters = EVP_PKEY_new();
-    if (!m_dh_parameters)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to create high level DH parameters structure");
+    if (!m_dh_parameters) {
+        cerr << "[-] (DiffieHellman) Failed to create high level DH parameters structure" << endl;
+        return;
+    }
 
-    if(EVP_PKEY_set1_DH(m_dh_parameters, dh) != 1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to setup high level DH parameters structure");
+    if(EVP_PKEY_set1_DH(m_dh_parameters, dh) != 1){
+        cerr << "[-] (DiffieHellman) Failed to setup high level DH parameters structure" << endl;
+        return;
+    }
 
     DH_free(dh);
 }
 
-DiffieHellman::~DiffieHellman() 
-{
+DiffieHellman::~DiffieHellman() {
+
     EVP_PKEY_free(m_dh_parameters);
 }
 
-EVP_PKEY* DiffieHellman::generateEphemeralKey() 
-{
+EVP_PKEY* DiffieHellman::generateEphemeralKey() {
+
     EVP_PKEY_CTX *DH_ctx = EVP_PKEY_CTX_new(m_dh_parameters, NULL);
-    if(!DH_ctx) 
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to create DH context");
+    if(!DH_ctx) {
+        cerr << "[-] (DiffieHellman) Failed to create DH context" << endl;
+        return nullptr;
+    }
 
     EVP_PKEY *ephemeral_key = NULL;
 
-    if(EVP_PKEY_keygen_init(DH_ctx) != 1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to initialize DH context");
+    if(EVP_PKEY_keygen_init(DH_ctx) != 1) {
+        cerr << "[-] (DiffieHellman) Failed to initialize DH context" << endl;
+        return nullptr;
+    }
 
-    if(EVP_PKEY_keygen(DH_ctx, &ephemeral_key) != 1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to generate ephemeral key");
+    if(EVP_PKEY_keygen(DH_ctx, &ephemeral_key) != 1) {
+        cerr << "[-] (DiffieHellman) Failed to generate ephemeral key" << endl;
+        return nullptr;
+    }
     
     EVP_PKEY_CTX_free(DH_ctx);
     return ephemeral_key;
