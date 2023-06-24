@@ -21,15 +21,17 @@ int main(int argc, char* argv[])
 
     if(argc != 4) {
 	    std::cerr << "Correct usage: ./serv PORT THREADS BACKLOG" << std::endl;
-        std::exit(-1);
+        return -1;
     }
 
     try {
-	port      = atoi(argv[1]);
+        OpenSSL_add_all_algorithms();
+
+	    port      = atoi(argv[1]);
         n_workers = atoi(argv[2]);
         backlog   = atoi(argv[3]);
 
-	Server server(port, n_workers, backlog, &g_signal_flag);
+	    Server server(port, n_workers, backlog, &g_signal_flag);
 
         // Set up the signal handler for Ctrl+C (SIGINT)
         std::signal(SIGINT, handle_signal);
@@ -38,17 +40,18 @@ int main(int argc, char* argv[])
     } 
     catch(std::invalid_argument& e) {
 	    std::cerr << e.what() << std::endl;
-	    std::exit(-1);
+	    return -1;
     }
     catch(std::runtime_error& e) {
 	    std::cerr << e.what() << std::endl;
-	    std::exit(-1);
+	    return -1;
     }
     catch(std::exception& e) {
         std::cerr << e.what() << std::endl;
+        return -1;
     }
 
     std::cout << std::endl << "Bye Bye..." << std::endl;
 
-    std::exit(0);
+    return 0;
 }

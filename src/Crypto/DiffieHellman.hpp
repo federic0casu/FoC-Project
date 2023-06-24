@@ -1,3 +1,4 @@
+#include <vector>
 #include <openssl/evp.h>
 
 class DiffieHellman {
@@ -10,8 +11,8 @@ public:
     ~DiffieHellman();
 
     EVP_PKEY* generateEphemeralKey();
-    int generateSharedSecret(EVP_PKEY* private_key, EVP_PKEY* peer_ephemeral_key, unsigned char*& shared_secret, size_t& shared_secret_size);
+    void generateSharedSecret(EVP_PKEY* private_key, EVP_PKEY* peer_ephemeral_key, std::vector<uint8_t>& shared_secret, size_t& shared_secret_size);
 
-    static int serializeKey(EVP_PKEY* key, uint8_t*& serialized_key, int& serialized_key_size);
+    static std::vector<uint8_t> serializeKey(EVP_PKEY* key);
     static EVP_PKEY* deserializeKey(uint8_t* serialized_key, int serialized_key_size);
 };

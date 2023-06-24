@@ -8,8 +8,8 @@
 
 using namespace std;
 
-DiffieHellman::DiffieHellman() {
-
+DiffieHellman::DiffieHellman() 
+{
     // p of the diffie hellman protocol
     static unsigned char dhp_2048[] = {
         0xDB, 0x53, 0x9C, 0x0B, 0xF0, 0xAE, 0x71, 0x24, 0x9B, 0xB8,
@@ -46,140 +46,132 @@ DiffieHellman::DiffieHellman() {
     };
 
     DH *dh = DH_new();
-    BIGNUM *p, *g;
 
-    if (dh == NULL){
-        cerr << "[-] (DiffieHellman) Failed to create low level DH parameters structure" << endl;
-        return;
-    }
+    if (dh == NULL)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to create low level DH parameters structure.");
 
-    p = BN_bin2bn(dhp_2048, sizeof(dhp_2048), NULL);
-    g = BN_bin2bn(dhg_2048, sizeof(dhg_2048), NULL);
+    BIGNUM* p = BN_bin2bn(dhp_2048, sizeof(dhp_2048), NULL);
+    BIGNUM* g = BN_bin2bn(dhg_2048, sizeof(dhg_2048), NULL);
     if (p == NULL || g == NULL || !DH_set0_pqg(dh, p, NULL, g)) {
         DH_free(dh);
-        BN_free(p);
-        BN_free(g);
+        
+        if (p != NULL) BN_free(p);
+        if (g != NULL) BN_free(g);
 
-        cerr << "[-] (DiffieHellman) Failed to setup low level DH parameters structure" << endl;
-        return;
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >>  Failed to setup low level DH parameters structure.");
     }
 
     m_dh_parameters = EVP_PKEY_new();
     if (!m_dh_parameters) {
-        cerr << "[-] (DiffieHellman) Failed to create high level DH parameters structure" << endl;
-        return;
+        DH_free(dh);
+        BN_free(p);
+        BN_free(g);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to create high level DH parameters structure.");
     }
 
-    if(EVP_PKEY_set1_DH(m_dh_parameters, dh) != 1){
-        cerr << "[-] (DiffieHellman) Failed to setup high level DH parameters structure" << endl;
-        return;
+    if(EVP_PKEY_set1_DH(m_dh_parameters, dh) != 1) {
+        DH_free(dh);
+        BN_free(p);
+        BN_free(g);
+        EVP_PKEY_free(m_dh_parameters);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::DiffieHellman() >> Failed to setup high level DH parameters structure.");
     }
 
     DH_free(dh);
 }
 
-DiffieHellman::~DiffieHellman() {
-
+DiffieHellman::~DiffieHellman() 
+{
     EVP_PKEY_free(m_dh_parameters);
 }
 
-EVP_PKEY* DiffieHellman::generateEphemeralKey() {
-
+EVP_PKEY* DiffieHellman::generateEphemeralKey() 
+{
     EVP_PKEY_CTX *DH_ctx = EVP_PKEY_CTX_new(m_dh_parameters, NULL);
-    if(!DH_ctx) {
-        cerr << "[-] (DiffieHellman) Failed to create DH context" << endl;
-        return nullptr;
-    }
+    if(!DH_ctx)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to create DH context.");
 
     EVP_PKEY *ephemeral_key = NULL;
 
     if(EVP_PKEY_keygen_init(DH_ctx) != 1) {
-        cerr << "[-] (DiffieHellman) Failed to initialize DH context" << endl;
-        return nullptr;
+        EVP_PKEY_CTX_free(DH_ctx);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to initialize DH context.");
     }
 
     if(EVP_PKEY_keygen(DH_ctx, &ephemeral_key) != 1) {
-        cerr << "[-] (DiffieHellman) Failed to generate ephemeral key" << endl;
-        return nullptr;
+        EVP_PKEY_CTX_free(DH_ctx);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateEphemeralKey() >> Failed to generate ephemeral key");
     }
     
     EVP_PKEY_CTX_free(DH_ctx);
     return ephemeral_key;
 }
 
-int DiffieHellman::generateSharedSecret(EVP_PKEY* private_key, EVP_PKEY* peer_ephemeral_key, unsigned char*& shared_secret, size_t& shared_secret_size) {
+void DiffieHellman::generateSharedSecret(EVP_PKEY* private_key, EVP_PKEY* peer_ephemeral_key, std::vector<uint8_t>& shared_secret, size_t& shared_secret_size) {
 
     EVP_PKEY_CTX* derive_ctx = EVP_PKEY_CTX_new(private_key, NULL);
-    if (!derive_ctx) {
-        cerr << "[-] (DiffieHellman) Failed to create derive context" << endl;
-        return -1;
-    }
+    if (!derive_ctx)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateSharedSecret() >> Failed to create derive context.");
 
     if (EVP_PKEY_derive_init(derive_ctx) <= 0) {
-        cerr << "[-] (DiffieHellman) Failed to initialize derive context" << endl;
-        return -1;
+        EVP_PKEY_CTX_free(derive_ctx);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateSharedSecret() >> Failed to initialize derive context.");
     }
 
     if (EVP_PKEY_derive_set_peer(derive_ctx, peer_ephemeral_key) <= 0) {
-        cerr << "[-] (DiffieHellman) Failed to set peer ephemeral keys in the context" << endl;
-        return -1;
+        EVP_PKEY_CTX_free(derive_ctx);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateSharedSecret() >> Failed to set peer ephemeral keys in the context.");
     }
 
     EVP_PKEY_derive(derive_ctx, NULL, &shared_secret_size);
-    shared_secret = new unsigned char[int(shared_secret_size)];
-    if (EVP_PKEY_derive(derive_ctx, shared_secret, &shared_secret_size) <= 0) {
-        cerr << "[-] (DiffieHellman) Failed to generate shared secret" << endl;
-        return -1;
+    shared_secret.resize(int(shared_secret_size));
+    if (EVP_PKEY_derive(derive_ctx, shared_secret.data(), &shared_secret_size) <= 0) {
+        EVP_PKEY_CTX_free(derive_ctx);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::generateSharedSecret() >> Failed to generate shared secret.");
     }
     
     EVP_PKEY_CTX_free(derive_ctx);
-    return 0;
 }
 
-int DiffieHellman::serializeKey(EVP_PKEY* key, uint8_t*& serialized_key, int& serialized_key_size) {
+std::vector<uint8_t> DiffieHellman::serializeKey(EVP_PKEY* key) {
 
     BIO *bio = BIO_new(BIO_s_mem());
-    if (!bio) {
-        cerr << "[-] (DiffieHellman) Failed to create BIO" << endl;
-        BIO_free(bio);
-        return -1;
-    }
+    if (!bio)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::serializeKey() >> Failed to create BIO.");
 
     if (!PEM_write_bio_PUBKEY(bio, key)) {
-        cerr << "[-] (DiffieHellman) Failed to write key in the BIO" << endl;
         BIO_free(bio);
-        return -1;
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::serializeKey() >> Failed to write key in the BIO.");
     }
 
-    serialized_key_size = BIO_pending(bio);
-    serialized_key = new uint8_t[1024];
+    int serialized_key_size = BIO_pending(bio);
+    std::vector<uint8_t> serialized_key(serialized_key_size);
 
-    int read = BIO_read(bio, serialized_key, serialized_key_size);
-    if (read != serialized_key_size) {
-        cerr << "[-] (DiffieHellman) Failed to write the serialized key in the buffer" << endl;
+    if (serialized_key.empty()) {
         BIO_free(bio);
-        delete[] serialized_key;
-        return -1;
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::serializeKey() >> Failed to allocate memory.");
+    }
+
+    if (BIO_read(bio, serialized_key.data(), serialized_key_size) != serialized_key_size) {
+        BIO_free(bio);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::serializeKey() >> Failed to write the serialized key in the buffer.");
     }
     
     BIO_free(bio);
-    return 0;
+    return serialized_key;
 }
 
-EVP_PKEY* DiffieHellman::deserializeKey(uint8_t* serialized_key, int serialized_key_size) {
-
+EVP_PKEY* DiffieHellman::deserializeKey(uint8_t* serialized_key, int serialized_key_size) 
+{
     BIO *bio = BIO_new_mem_buf(serialized_key, serialized_key_size);
-    if (!bio) {
-        cerr << "[-] (DiffieHellman) Failed to create the BIO" << endl;
-        return nullptr;
-    }
+    if (!bio)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::deserializeKey() >> Failed to create the BIO");
 
     EVP_PKEY* deserialized_key = nullptr;
     deserialized_key = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
-    if (!deserialized_key) {        
-        cerr << "[-] (DiffieHellman) Failed to read the deserialized key" << endl;
+    if (deserialized_key == nullptr) {        
         BIO_free(bio);
-        return nullptr;
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m DiffieHellman::deserializeKey() >> Failed to read the deserialized key");
     }
 
     BIO_free(bio);

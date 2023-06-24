@@ -55,6 +55,7 @@ class Worker {
 
 public:
     Worker(jobs_t* jobs);
+    ~Worker();
 
     // Thread logic
     void Run();
@@ -63,7 +64,9 @@ private:
     std::vector<uint8_t> iv;
     std::vector<uint8_t> hmac_key;
     std::vector<uint8_t> session_key;
-    uint8_t username[USERNAME_SIZE];
+    std::vector<uint8_t> username;
+    uint8_t counter;
+    const std::string server_private_key_path = "../res/private_keys/server_privkey.pem";
     
     int client_socket;
     jobs_t* jobs;
@@ -74,6 +77,7 @@ private:
     
     // Key exchange protocol
     void Handshake();
+    bool ClientExists(uint8_t* username, ssize_t username_size);
 
     // Worker Logic
     ClientReq RequestHandler();

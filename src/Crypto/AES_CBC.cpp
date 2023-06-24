@@ -1,33 +1,44 @@
 #include "AES_CBC.hpp"
 
 
-AES_CBC::AES_CBC(uint8_t type, const std::vector<unsigned char>& session_key) : type(type), processed_bytes(0)
+AES_CBC::AES_CBC(uint8_t type, const std::vector<uint8_t>& session_key) : type(type), processed_bytes(0)
 {
     if (type != ENCRYPT && type != DECRYPT)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::AES_CBC() >> Invalid type specified.");
 
-    key.resize(AES_KEY_SIZE);
-    std::copy(session_key.begin(), session_key.end(), key.begin());
+    this->key.resize(session_key.size());
+    std::copy(session_key.begin(), session_key.end(), this->key.begin());
 }
 
 AES_CBC::~AES_CBC()
 {
-    iv.clear();
-    key.clear();
-    plaintext.clear();
-    ciphertext.clear();
+    EVP_CIPHER_CTX_free(ctx);
+
+    std::memset(reinterpret_cast<void*>(this->iv.data()), 0, this->iv.size());
+    this->iv.clear();
+
+    std::memset(reinterpret_cast<void*>(this->key.data()), 0, this->key.size());
+    this->key.clear();
+
+    std::memset(reinterpret_cast<void*>(this->plaintext.data()), 0, this->plaintext.size());
+    this->plaintext.clear();
+
+    std::memset(reinterpret_cast<void*>(this->ciphertext.data()), 0, this->ciphertext.size());
+    this->ciphertext.clear();
 }
 
 void AES_CBC::initializeEncrypt()
 {
-    iv.resize(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
+    auto iv_lenght = EVP_CIPHER_iv_length(EVP_aes_256_cbc());
+    this->iv.resize(iv_lenght);
+
     const long unsigned int block_size = EVP_CIPHER_block_size(EVP_aes_256_cbc());
     
     // Seed OpenSSL PRNG
     RAND_poll();
 
     // Generate IV
-    if (RAND_bytes(iv.data(), iv.size()) != 1)
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), static_cast<int>(iv.size())) != 1)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeEncrypt() >> Failed to generate random bytes for IV.");
 
     // Check for possible integer overflow in (plaintext_size + block_size) --> PADDING!
@@ -37,7 +48,7 @@ void AES_CBC::initializeEncrypt()
     if (!(ctx = EVP_CIPHER_CTX_new()))
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeEncrypt() >> Failed to create EVP_CIPHER_CTX.");
 
-    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key.data(), iv.data()) != 1)
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char*>(key.data()), reinterpret_cast<const unsigned char*>(iv.data())) != 1)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeEncrypt() >> Failed to initialize encryption.");
 
     ciphertext.resize(plaintext.size() + block_size);
@@ -46,8 +57,10 @@ void AES_CBC::initializeEncrypt()
 void AES_CBC::updateEncrypt()
 {
     int update_len = 0;
-    if (EVP_EncryptUpdate(ctx, ciphertext.data(), &update_len, plaintext.data(), plaintext.size()) != 1)
+    if (EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()), &update_len, reinterpret_cast<const unsigned char*>(plaintext.data()), static_cast<int>(plaintext.size())) != 1) {
+        
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::updateEncrypt() >> Encryption update failed.");
+    }
 
     processed_bytes += update_len;
 }
@@ -55,13 +68,15 @@ void AES_CBC::updateEncrypt()
 void AES_CBC::finalizeEncrypt()
 {
     int final_len = 0;
-    if (EVP_EncryptFinal_ex(ctx, ciphertext.data() + processed_bytes, &final_len) != 1)
+    if (EVP_EncryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(ciphertext.data() + processed_bytes*sizeof(uint8_t)), &final_len) != 1) {
+        
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::finalizeEncrypt() >> Encryption finalization failed.");
-
-
-    EVP_CIPHER_CTX_free(ctx);
+    }
 
     processed_bytes += final_len;
+    ciphertext.erase(ciphertext.begin() + processed_bytes, ciphertext.end());
+
+    std::memset(reinterpret_cast<void*>(plaintext.data()), 0, plaintext.size());
     plaintext.clear();
 }
 
@@ -76,7 +91,7 @@ void AES_CBC::initializeDecrypt()
     if (!(ctx = EVP_CIPHER_CTX_new()))
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeDecrypt() >> Failed to create EVP_CIPHER_CTX.");
     
-    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key.data(), iv.data()) != 1)
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char*>(key.data()), reinterpret_cast<const unsigned char*>(iv.data())) != 1)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeDecrypt() >> Failed to initialize decryption.");
 
     processed_bytes = 0;
@@ -85,8 +100,10 @@ void AES_CBC::initializeDecrypt()
 void AES_CBC::updateDecrypt()
 {
     int update_len = 0;
-    if (EVP_DecryptUpdate(ctx, plaintext.data(), &update_len, ciphertext.data(), ciphertext.size()) != 1)
+    if (EVP_DecryptUpdate(ctx, reinterpret_cast<unsigned char*>(plaintext.data()), &update_len, reinterpret_cast<const unsigned char*>(ciphertext.data()), static_cast<int>(ciphertext.size())) != 1) {
+        
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::updateDecrypt() >> Decryption update failed.");
+    }
 
     processed_bytes += update_len;
 }
@@ -95,39 +112,49 @@ void AES_CBC::finalizeDecrypt()
 {
     int final_len = 0;
 
-    if (EVP_DecryptFinal_ex(ctx, plaintext.data() + processed_bytes, &final_len) != 1)
-    {
-        int error = ERR_get_error();
-        if (error == EVP_R_BAD_DECRYPT)
+    if (EVP_DecryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(plaintext.data() + processed_bytes*sizeof(uint8_t)), &final_len) != 1) {
+        
+        auto error_code = ERR_get_error();
+        std::cout << error_code << std::endl;
+
+        char error_string[1024];
+        ERR_error_string(error_code, error_string);
+
+        std::cout << error_string << std::endl;
+
+        ERR_print_errors_fp(stderr);
+        
+        if (error_code == EVP_R_BAD_DECRYPT)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::finalizeDecrypt() >> Decryption failed: Authentication failure or ciphertext tampered.");
-        else
+        else {
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::finalizeDecrypt() >> Decryption failed: Unknown error.");
+        }
+
     }
 
     processed_bytes += final_len;
-
-    EVP_CIPHER_CTX_free(ctx);
 }
 
 void AES_CBC::run(const std::vector<uint8_t>& input_buffer, std::vector<uint8_t>& output_buffer, std::vector<uint8_t>& iv)
 {
-    if (type == ENCRYPT)
+    if (this->type == ENCRYPT)
     {
-        plaintext.resize(input_buffer.size());
-        std::copy(input_buffer.begin(), input_buffer.end(), plaintext.begin());
+        this->plaintext.resize(input_buffer.size());
+        std::copy(input_buffer.begin(), input_buffer.end(), this->plaintext.begin());
 
         initializeEncrypt();
         std::copy(this->iv.begin(), this->iv.end(), iv.begin());
         updateEncrypt();
         finalizeEncrypt();
 
-        output_buffer.resize(processed_bytes);
-        std::copy(ciphertext.begin(), ciphertext.end(), output_buffer.begin());
+        output_buffer.resize(this->ciphertext.size());
+        std::copy(this->ciphertext.begin(), this->ciphertext.end(), output_buffer.begin());
+        output_buffer.shrink_to_fit();
     }
-    else if (type == DECRYPT)
+    else if (this->type == DECRYPT)
     {
-        ciphertext.resize(input_buffer.size());
-        std::copy(input_buffer.begin(), input_buffer.end(), ciphertext.begin());
+        this->ciphertext.resize(input_buffer.size());
+        std::copy(input_buffer.begin(), input_buffer.end(), this->ciphertext.begin());
 
         this->iv.resize(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
         std::copy(iv.begin(), iv.end(), this->iv.begin());
@@ -136,8 +163,9 @@ void AES_CBC::run(const std::vector<uint8_t>& input_buffer, std::vector<uint8_t>
         updateDecrypt();
         finalizeDecrypt();
 
-        output_buffer.resize(plaintext.size());
-        std::copy(plaintext.begin(), plaintext.end(), output_buffer.begin());
+        output_buffer.resize(this->plaintext.size());
+        std::copy(this->plaintext.begin(), this->plaintext.end(), output_buffer.begin());
+        output_buffer.shrink_to_fit();
     }
     else
     {

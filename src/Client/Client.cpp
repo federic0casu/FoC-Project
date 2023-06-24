@@ -1,7 +1,10 @@
 #include "Client.hpp"
 
+
 Client::Client(const std::string& server_ip, int server_port)
 {
+    m_long_term_key = nullptr;
+    
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sock_fd == -1)
@@ -20,12 +23,19 @@ Client::Client(const std::string& server_ip, int server_port)
 Client::~Client()
 {
     close(sock_fd);
+
+    m_username.erase(m_username.begin(), m_username.end());
+    
+    hmac_key.clear();
+    session_key.clear();
 }
 
 void Client::connect_to_server()
 {
-    if (connect(sock_fd, (struct sockaddr*)&server_address, sizeof(server_address)) == -1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to connect to the server.");
+    if (connect(sock_fd, (struct sockaddr*)&server_address, sizeof(server_address)) == -1) {
+        char error_message[] = "\033[1;31m[ERROR]\033[0m Failed to connect to the server.";
+        throw std::runtime_error(error_message);
+    }
 
     std::cout << "Connected to the server." << std::endl;
 }
@@ -37,13 +47,16 @@ void Client::balance()
         ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding);
 
         #ifdef DEBUG
-        std::cout << "[1] balance ->\t" << balance_request.request_code << ":" << balance_request.recipient << ":" << balance_request.amount << std::endl;
+        std::cout << "[1] balance ->\t" 
+                  << balance_request.request_code << ":" 
+                  << balance_request.recipient << ":" 
+                  << balance_request.amount << std::endl;
         #endif 
 
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         balance_request.serialize(plaintext);
 
-        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
 
         #ifdef DEBUG
         std::cout << "Sending encrypted message..." << std::endl;
@@ -52,9 +65,27 @@ void Client::balance()
 
         std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
+/*
+        std::vector<uint8_t> buffer(SessionMessage::get_size(BALANCE_RESPONSE_SIZE));
+        recv_from_server(buffer);
+
+        SessionMessage encrypted_response = SessionMessage::deserialize(buffer, BALANCE_RESPONSE_SIZE);
+
+        #ifdef DEBUG
+        std::cout << "Incoming encrypted message..." << std::endl;
+        encrypted_response.print();
+        #endif
+
+        plaintext.resize(BALANCE_RESPONSE_SIZE);
+        plaintext.assign(plaintext.size(), 0);
+        encrypted_response.decrypt(this->session_key, plaintext);
+
+        BalanceResponse response = BalanceResponse::deserialize(plaintext.data());
+        response.print();
+*/
     }
     catch(std::runtime_error& e) {
-        std::cerr << e.what() << std::endl;
+        throw e;
     }
 }
 
@@ -71,7 +102,7 @@ void Client::transfer()
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         transfer_request.serialize(plaintext);
 
-        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
         
         #ifdef DEBUG
         std::cout << "Sending encrypted message..." << std::endl;
@@ -82,7 +113,7 @@ void Client::transfer()
         send_to_server(to_send);
     }
     catch(std::runtime_error& e) {
-        std::cerr << e.what() << std::endl;
+        throw e;
     }
 }
 
@@ -101,7 +132,7 @@ void Client::list()
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         list_request.serialize(plaintext);
         
-        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
         
         #ifdef DEBUG
         std::cout << "Sending encrypted message..." << std::endl;
@@ -128,7 +159,7 @@ void Client::list()
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m HMAC verification: FAILED.");
 
         plaintext.resize(LIST_RESPONSE_1_SIZE);
-        encrypted_response_1.decrypt(session_key, plaintext);
+        encrypted_response_1.decrypt(this->session_key, plaintext);
 
         List response_1 = List::deserialize(plaintext);
 
@@ -161,7 +192,7 @@ void Client::list()
                 throw std::runtime_error("\033[1;31m[ERROR]\033[0m HMAC verification: FAILED.");
 
             plaintext.resize(LIST_RESPONSE_2_SIZE);
-            encrypted_response_2.decrypt(session_key, plaintext);
+            encrypted_response_2.decrypt(this->session_key, plaintext);
 
             List response_2 = List::deserialize(plaintext);
 
@@ -172,210 +203,292 @@ void Client::list()
 
     }
     catch(std::runtime_error& e) {
-        std::cerr << e.what() << std::endl;
+        throw e;
     }
 }
 
-int Client::handshake() {
-
-    #ifdef DEBUG
-    std::cout << "START HANDSHAKE" << std::endl;
-    #endif 
-
+void Client::handshake() 
+{
     unsigned char password[20];
-    std::cout << "Insert username: ";
+    std::cout << ">> Insert username: ";
     std::cin >> m_username;
-    std::cout << "Insert password: ";
+    std::cout << ">> Insert password: ";
     std::cin >> password;
 
 
     DiffieHellman dh;
-    EVP_PKEY* ephemeral_key = dh.generateEphemeralKey();
+    EVP_PKEY* ephemeral_key = nullptr;
+    try {
+        // Generate ephemeral key
+        ephemeral_key = dh.generateEphemeralKey();
+    } catch(const std::runtime_error& error) {
+        std::cerr << error.what() << std::endl;
 
-    // Generate ephemeral key
-    uint8_t* serialized_ephemeral_key = nullptr;
-    int serialized_ephemeral_key_size;
-    
-    if (DiffieHellman::serializeKey(ephemeral_key, serialized_ephemeral_key, serialized_ephemeral_key_size) < 0) 
-    {
-        EVP_PKEY_free(ephemeral_key);
-        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
-        delete[] serialized_ephemeral_key;
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m handshake() >> Failed to create/serialize DH ephemeral key.");
+        if (ephemeral_key != nullptr) 
+            EVP_PKEY_free(ephemeral_key); 
+        
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to generate ephemeral key.");
     }
 
-    HandshakeM1 m1(serialized_ephemeral_key, serialized_ephemeral_key_size, reinterpret_cast<const unsigned char*>(m_username.c_str()));
-    #ifdef DEBUG
-    m1.print();
-    #endif
+    // Serialize ephemeral key
+    std::vector<uint8_t> serialized_ephemeral_key;
+    try {
+        serialized_ephemeral_key = DiffieHellman::serializeKey(ephemeral_key);
+    } catch(const std::runtime_error& error) {
+        std::cerr << error.what() << std::endl;
 
-    std::vector<uint8_t> serialized_m1(HandshakeM1::GetSize());
-    m1.serialize(serialized_m1.data());
+        EVP_PKEY_free(ephemeral_key);
+        
+        if (!serialized_ephemeral_key.empty()) {
+            std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+            serialized_ephemeral_key.clear();
+        }
+
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to serialize ephemeral key.");
+    }
+
+    HandshakeM1 m1(serialized_ephemeral_key, serialized_ephemeral_key.size(), reinterpret_cast<const unsigned char*>(m_username.c_str()));
+
+    std::vector<uint8_t> serialized_m1;
+    m1.serialize(serialized_m1);
 
     try {
         send_to_server(serialized_m1);
-    } catch(...) {
-        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
-        delete[] serialized_ephemeral_key;
+    } catch(const std::runtime_error& error) {
+        std::cerr << error.what() << std::endl;
+
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+        serialized_ephemeral_key.clear();
+
+        EVP_PKEY_free(ephemeral_key);
+
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m handshake() >> Failed to send M1.");
     }
 
-    // aspetto m2 dal server
-    std::vector<uint8_t> serialized_packet(HandshakeM2::getSize());
-    
+
+    // Receive the result of existence of the user
+    std::vector<uint8_t> serialized_m2(HandshakeM2::GetSize());
     try {
-        recv_from_server(serialized_packet);
-    } catch(...) {
+        recv_from_server(serialized_m2);
+    } catch(const std::runtime_error& error) {
+        std::cerr << error.what() << std::endl;
+        
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+        serialized_ephemeral_key.clear();
+
         EVP_PKEY_free(ephemeral_key);
-        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
-        delete[] serialized_ephemeral_key;
+
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m handshake() >> Failed to receive M2.");
     }
 
-    // open the private key PEM file
-    string private_key_file = "../res/keys/daniel_key.pem";
-    BIO *bio = BIO_new_file(private_key_file.c_str(), "r");
-    if (!bio)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to open private key file.");
-    
-    // encrypt and save the long term private key
-    m_long_term_key = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
-    BIO_free(bio);
+    HandshakeM2 m2 = HandshakeM2::deserialize(serialized_m2);
+    serialized_m2.clear();
 
-    // check if the password is correct
-    if (!m_long_term_key) 
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to read private key.");
+    if (m2.result == 0) {
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+        serialized_ephemeral_key.clear();
 
-    HandshakeM2 m2 = HandshakeM2::deserialize(serialized_packet.data());
-    serialized_packet.clear();
+        EVP_PKEY_free(ephemeral_key);
 
-    // retrieve the peer ephemeral key from the M3 packet
-    EVP_PKEY* peer_ephemeral_key = DiffieHellman::deserializeKey(m2.ephemeral_key, m2.ephemeral_key_size);
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m handshake() >> Failed authentication.");
+        return;
+    }
 
-    // generate the shared secret
-    uint8_t* shared_secret = nullptr;
-    size_t shared_secret_size;    
-    int res = dh.generateSharedSecret(ephemeral_key, peer_ephemeral_key, shared_secret, shared_secret_size);
+    EVP_PKEY* peer_ephemeral_key = nullptr;
+    std::vector<uint8_t> shared_secret;
+    size_t shared_secret_size;  
+    try {  
+        // retrieve the peer ephemeral key from the M2 packet
+        peer_ephemeral_key = DiffieHellman::deserializeKey(m2.ephemeral_key.data(), m2.ephemeral_key_size);
+        
+        // Generate shared secret
+        dh.generateSharedSecret(ephemeral_key, peer_ephemeral_key, shared_secret, shared_secret_size);
+    } catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+        serialized_ephemeral_key.clear();
+
+        std::memset(reinterpret_cast<void*>(shared_secret.data()), 0, shared_secret.size());
+        shared_secret.clear();
+
+        EVP_PKEY_free(ephemeral_key);
+
+        if (peer_ephemeral_key != nullptr)
+            EVP_PKEY_free(peer_ephemeral_key);
+
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to generate shared secret.");
+    }
     EVP_PKEY_free(ephemeral_key);
     EVP_PKEY_free(peer_ephemeral_key);
-    if (res < 0) {
-        std::memset(reinterpret_cast<void*>(shared_secret), 0, shared_secret_size);
-        delete[] shared_secret;
-        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
-        delete[] serialized_ephemeral_key;
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to generate shared secret.");
+
+    // generate the session and the hmac keys from the shared secret
+    std::vector<uint8_t> keys;
+    uint32_t keys_size;
+    try {
+        SHA_512::generate(shared_secret.data(), shared_secret_size, keys, keys_size);
+        std::memset(reinterpret_cast<void*>(shared_secret.data()), 0, shared_secret.size());
+        shared_secret.clear();
+    } catch(std::runtime_error& error) {
+        std::cerr << error.what() << std::endl;
+
+        std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+        serialized_ephemeral_key.clear();
+
+        std::memset(reinterpret_cast<void*>(keys.data()), 0, keys.size());
+        keys.clear();
+
+        std::memset(reinterpret_cast<void*>(shared_secret.data()), 0, shared_secret.size());
+        shared_secret.clear();
+
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to hash shared secret.");
     }
+
+    std::memcpy(this->session_key.data(), keys.data(), (keys.size()/2) * sizeof(uint8_t));
+    std::memcpy(this->hmac_key.data(), keys.data() + ((keys.size()/2) * sizeof(uint8_t)), HMAC_DIGEST_SIZE * sizeof(uint8_t));
     
-    // generate the session key and hmac key
-    unsigned char* keys = nullptr;
-    unsigned int keys_size;
-    SHA_512::generate(shared_secret, shared_secret_size, keys, keys_size);
-    std::memcpy(session_key.data(), keys, (keys_size/2) * sizeof(unsigned char));
-    std::memcpy(hmac_key.data(), keys + ((keys_size/2) * sizeof(unsigned char)), HMAC_DIGEST_SIZE * sizeof(unsigned char));
-    std::memset(reinterpret_cast<void*>(shared_secret), 0, shared_secret_size);
-    delete[] shared_secret;
-    std::memset(reinterpret_cast<void*>(keys), 0, keys_size);
-    delete[] keys;
+    std::memset(reinterpret_cast<void*>(keys.data()), 0, keys.size());
+    keys.clear();
 
     // prepare <g^a,g^b>
-    int ephemeral_keys_buffer_size = m2.ephemeral_key_size + serialized_ephemeral_key_size;
-    uint8_t* ephemeral_keys_buffer = new uint8_t[ephemeral_keys_buffer_size];
-    std::memcpy(ephemeral_keys_buffer, serialized_ephemeral_key, serialized_ephemeral_key_size);
-    std::memcpy(ephemeral_keys_buffer + serialized_ephemeral_key_size, m2.ephemeral_key, m2.ephemeral_key_size);
-    std::memset(reinterpret_cast<void*>(serialized_ephemeral_key), 0, serialized_ephemeral_key_size);
-    delete[] serialized_ephemeral_key;
+    int ephemeral_keys_buffer_size = m2.ephemeral_key_size + serialized_ephemeral_key.size();
+    std::vector<uint8_t> ephemeral_keys_buffer(ephemeral_keys_buffer_size);
+    std::memcpy(ephemeral_keys_buffer.data(), serialized_ephemeral_key.data(), serialized_ephemeral_key.size());
+    std::memcpy(ephemeral_keys_buffer.data() + serialized_ephemeral_key.size(), m2.ephemeral_key.data(), m2.ephemeral_key_size);
+    
+    std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
+    serialized_ephemeral_key.clear();
 
-    // questa parte va modificata mettendo la password 
-    // calculate <pass>_c
-    unsigned char* signature = nullptr;
-    unsigned int signature_size;
-    DigitalSignature::generate(ephemeral_keys_buffer, ephemeral_keys_buffer_size, signature, signature_size, m_long_term_key);
-    std::vector<uint8_t> signature_vector(signature_size);
-    std::memcpy(signature_vector.data(), signature, signature_size);
+    // calculate <g^a,g^b>_privKc
+    std::vector<unsigned char> signature;
+    try {
+        char private_key_path[sizeof("../res/keys/") + sizeof(m_username.c_str()) + sizeof("_privkey.pem")];
+        sprintf(private_key_path, "../res/keys/%s_privkey.pem", m_username.c_str());
 
-    // calculate {<g^a,g^b>_s}_Ksess
-    std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
-    std::vector<uint8_t> ciphertext;
-    AES_CBC* encryptor = new AES_CBC(ENCRYPT, session_key);
-    encryptor->run(signature_vector, ciphertext, iv);
-    std::memset(reinterpret_cast<void*>(signature), 0, signature_size);
-    delete[] signature;
-    signature_vector.clear();
-    delete encryptor;
+        // Create an instance of RSASignature with the private key file
+        RSASignature rsa(private_key_path, "");
 
-    // retrieve and verify the certificate
-    X509* server_certificate = CertificateStore::deserializeCertificate(m2.serialized_certificate, m2.serialized_certificate_size);
-    CertificateStore* certificate_store = CertificateStore::getStore();
-    if (!certificate_store->verify(server_certificate)) {
-        X509_free(server_certificate);
-        std::memset(reinterpret_cast<void*>(ephemeral_keys_buffer), 0, ephemeral_keys_buffer_size);
-        delete[] ephemeral_keys_buffer;
-        ciphertext.clear();
-        iv.clear();
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to generate shared secret.");
+        // Sign the buffer
+        signature = rsa.sign(ephemeral_keys_buffer);
+    } catch(const std::runtime_error& error) {
+        throw error;
     }
 
-    // retrieve the server public key 
-    EVP_PKEY* server_public_key = certificate_store->getPublicKey(server_certificate); 
-    X509_free(server_certificate);
+    // calculate {<g^a,g^b>_privKc}_Ksess
+    std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
+    std::vector<uint8_t> ciphertext;
+    AES_CBC* encryptor = nullptr;
+    try {
+        encryptor = new AES_CBC(ENCRYPT, this->session_key);
+        encryptor->run(signature, ciphertext, iv);
+        delete encryptor;
+
+        std::memset(reinterpret_cast<void*>(signature.data()), 0, signature.size());
+        signature.clear();
+    } catch(...) {
+        if (encryptor != nullptr)
+            delete encryptor;
+
+        std::memset(reinterpret_cast<void*>(signature.data()), 0, signature.size());
+        signature.clear();
+
+        std::memset(reinterpret_cast<void*>(ephemeral_keys_buffer.data()), 0, ephemeral_keys_buffer.size());
+        ephemeral_keys_buffer.clear();
+        
+        throw;
+    }
 
     // decrypt the encrypted digital signature
     std::vector<uint8_t> decrypted_signature;
-    std::vector<uint8_t> encrypted_signature(144 * sizeof(uint8_t));
-    std::memcpy(encrypted_signature.data(), m2.encrypted_signature, 144 * sizeof(uint8_t));
-    std::vector<uint8_t> signature_iv(sizeof(uint8_t) * AES_BLOCK_SIZE);
-    std::memcpy(signature_iv.data(), m2.iv, sizeof(uint8_t) * AES_BLOCK_SIZE);
-    AES_CBC* decryptor = new AES_CBC(DECRYPT, session_key);
-    decryptor->run(encrypted_signature, decrypted_signature, signature_iv);
-    delete decryptor;
+    AES_CBC* decryptor = nullptr;
+    try {
+        decryptor = new AES_CBC(DECRYPT, this->session_key);
+        decryptor->run(m2.encrypted_signature, decrypted_signature, m2.iv);
+        delete decryptor;
+        decrypted_signature.resize(DECRYPTED_SIGNATURE_SIZE);
+    } catch (const std::runtime_error& error) {
+        if (decryptor != nullptr)
+            delete decryptor;
+        
+        std::memset(reinterpret_cast<void*>(decrypted_signature.data()), 0, decrypted_signature.size());
+        decrypted_signature.clear();
+        
+        throw error;
+    }
 
     // verify the signature
-    bool signature_verification = DigitalSignature::verify(ephemeral_keys_buffer, ephemeral_keys_buffer_size, decrypted_signature.data(), decrypted_signature.size(), server_public_key);
-    delete[] ephemeral_keys_buffer;
-    decrypted_signature.clear();
-    EVP_PKEY_free(server_public_key);
-    if (signature_verification) 
-    {
-        ciphertext.clear();
-        iv.clear();
+    RSASignature* rsa = nullptr;
+    bool signature_verification = true;
+    try {
+        char public_key_path[] = "../res/public_keys/server_pubkey.pem";
+
+        rsa = new RSASignature("", public_key_path);
+        signature_verification = rsa->verify(ephemeral_keys_buffer, decrypted_signature);
+        delete rsa;
+        
+        std::memset(reinterpret_cast<void*>(ephemeral_keys_buffer.data()), 0, ephemeral_keys_buffer.size());
+        ephemeral_keys_buffer.clear();
+
+        std::memset(reinterpret_cast<void*>(decrypted_signature.data()), 0, decrypted_signature.size());
+        decrypted_signature.clear();
+    } catch(std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+
+        if (rsa != nullptr)
+            delete rsa;
+        
+        std::memset(reinterpret_cast<void*>(ephemeral_keys_buffer.data()), 0, ephemeral_keys_buffer.size());
+        ephemeral_keys_buffer.clear();
+
+        std::memset(reinterpret_cast<void*>(decrypted_signature.data()), 0, decrypted_signature.size());
+        decrypted_signature.clear();
+
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to verify digital signature.");
     }
 
-    HandshakeM3 m3(iv.data(), ciphertext.data());
-    uint8_t* serialized_packet_tmp = m3.serialize();
-    serialized_packet.resize(HandshakeM3::getSize());
-    std::memcpy(serialized_packet.data(), serialized_packet_tmp, HandshakeM3::getSize());
+    if (!signature_verification)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Server not authenticated.");
+
+
+    HandshakeM3 m3(iv, ciphertext);
+
+    std::vector<uint8_t> serialized_m3 = m3.serialize();
+
     try {
-        send_to_server(serialized_packet);
-    } catch(...) {
-        std::memset(reinterpret_cast<void*>(serialized_packet_tmp), 0, HandshakeM3::getSize());
-        delete[] serialized_packet_tmp;
+        send_to_server(serialized_m3);
+
+        std::memset(reinterpret_cast<void*>(ciphertext.data()), 0, ciphertext.size());
         ciphertext.clear();
+
+        std::memset(reinterpret_cast<void*>(iv.data()), 0, iv.size());
+        iv.clear();
+    } catch(...) {
+        std::memset(reinterpret_cast<void*>(ciphertext.data()), 0, ciphertext.size());
+        ciphertext.clear();
+
+        std::memset(reinterpret_cast<void*>(iv.data()), 0, iv.size());
         iv.clear();
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to send M3.");
     }
 
     // reset the counter
     m_counter = 0;
-
-    std::memset(reinterpret_cast<void*>(serialized_packet_tmp), 0, HandshakeM3::getSize());
-    delete[] serialized_packet_tmp;
-    ciphertext.clear();
-    iv.clear();
-
-    #ifdef DEBUG
-    std::cout << "END HANDSHAKE" << std::endl;
-    #endif 
 }
 
 void Client::send_to_server(const std::vector<uint8_t>& buffer)
 {
+    ssize_t bytes_sent = 0;
     ssize_t total_bytes_sent = 0;
     ssize_t buffer_size = buffer.size();
 
     while (total_bytes_sent < buffer_size)
     {
-        ssize_t bytes_sent = send(sock_fd, (void*)(buffer.data() + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+        bytes_sent = send(sock_fd, reinterpret_cast<const void*>(buffer.data() + total_bytes_sent), buffer_size - total_bytes_sent, 0);
+
+        if (bytes_sent != -1) {
+            total_bytes_sent += bytes_sent;
+            continue;
+        }
 
         if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET))
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Server disconnected");
@@ -383,26 +496,30 @@ void Client::send_to_server(const std::vector<uint8_t>& buffer)
         if (bytes_sent == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to send data");
 
-        total_bytes_sent += bytes_sent;
     }
 }
 
 void Client::recv_from_server(std::vector<uint8_t>& buffer)
 {
+    ssize_t bytes_received = 0;
     ssize_t total_bytes_received = 0;
     ssize_t buffer_size = buffer.size();
 
     while (total_bytes_received < buffer_size)
     {
-        ssize_t bytes_received = recv(sock_fd, (void*)(buffer.data() + total_bytes_received), buffer_size - total_bytes_received, 0);
+        bytes_received = recv(sock_fd, reinterpret_cast<void*>(buffer.data() + total_bytes_received), buffer_size - total_bytes_received, 0);
         
+        if (bytes_received != -1 && bytes_received != 0) {
+            total_bytes_received += bytes_received;
+            continue;
+        }
+
         if (bytes_received == -1)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to receive data");
 
         if (bytes_received == 0)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Server disconnected");
 
-        total_bytes_received += bytes_received;
     }
 }
 

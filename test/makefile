@@ -5,7 +5,7 @@ LIBS = -lssl -lcrypto -pthread
 SERVER_SRCS = ../src/Server/Server.cpp ../src/Server/main_server.cpp ../src/Server/Worker.cpp
 CLIENT_SRCS = ../src/Client/Client.cpp ../src/Client/main_client.cpp
 PACKET_SRCS = ../src/Packet/List.cpp ../src/Packet/SessionMessage.cpp
-SECURITY_SRCS = ../src/Crypto/AES_CBC.cpp ../src/Crypto/HMAC.cpp ../src/Crypto/DiffieHellman.cpp ../src/Crypto/DigitalSignature.cpp ../src/Crypto/CertificateStore.cpp ../src/Crypto/SHA_512.cpp
+SECURITY_SRCS = ../src/Crypto/AES_CBC.cpp ../src/Crypto/HMAC.cpp ../src/Crypto/DiffieHellman.cpp ../src/Crypto/RSASignature.cpp ../src/Crypto/SHA_512.cpp
 
 SERVER_EXEC = server
 CLIENT_EXEC = client

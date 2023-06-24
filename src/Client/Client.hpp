@@ -1,16 +1,17 @@
-#include <iostream>
+#include <ctime>
 #include <string>
 #include <iomanip>
-#include <ctime>
 #include <cstring>
-#include <unistd.h>
+#include <iostream>
 #include <stdexcept>
 
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 
 #include "../Packet/List.hpp"
+#include "../Packet/Balance.hpp"
 #include "../Packet/ClientReq.hpp"
 #include "../Packet/Handshake.hpp"
 #include "../Packet/SessionMessage.hpp"
@@ -28,7 +29,7 @@ public:
     void send_to_server(const std::vector<uint8_t>& buffer);
     void recv_from_server(std::vector<uint8_t>& buffer);
     
-    int handshake();
+    void handshake();
 
     void balance();
     void transfer();
@@ -45,5 +46,6 @@ private:
 
     std::string m_username;
 
+    EVP_PKEY* get_private_key();
     void print_formatted_date(std::time_t timestamp);
 };
