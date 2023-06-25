@@ -110,7 +110,7 @@ void Server::accept_connections()
             continue;
         }
 
-        client_socket = accept(sock_fd, (struct sockaddr*)&client_address, &addrlen);
+        client_socket = accept(sock_fd, reinterpret_cast<struct sockaddr*>(&client_address), &addrlen);
 
         if (client_socket == -1) 
         {

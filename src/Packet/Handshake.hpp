@@ -21,20 +21,29 @@
 struct HandshakeM1
 {
     uint32_t ephemeral_key_size;
-    uint8_t ephemeral_key[EPHEMERAL_KEY_SIZE];
-    uint8_t username[USERNAME_SIZE];
+    uint8_t  ephemeral_key[EPHEMERAL_KEY_SIZE];
+    uint8_t  username_size;
+    uint8_t  username[USERNAME_SIZE];
 
-    HandshakeM1() {}
+    HandshakeM1() : ephemeral_key_size(0), username_size(0)
+    {
+        std::memset(this->username, 0, USERNAME_SIZE);
+        std::memset(this->ephemeral_key, 0, EPHEMERAL_KEY_SIZE);
+    }
 
-    HandshakeM1(std::vector<uint8_t>& ephemeral_key, int key_size, const unsigned char* username)
-    {    
+    HandshakeM1(std::vector<uint8_t>& ephemeral_key, int key_size, const unsigned char* username, size_t username_lenght)
+    {   
+        if (username_size > USERNAME_SIZE) 
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Username too big!");
+
         this->ephemeral_key_size = (uint32_t) key_size;
+        this->username_size      = (uint8_t) username_lenght;
 
         std::memset(this->ephemeral_key, 0, EPHEMERAL_KEY_SIZE);
         std::memcpy(this->ephemeral_key, ephemeral_key.data(), this->ephemeral_key_size);
 
-        std::memset(this->username, 0, sizeof(this->username));
-        std::memcpy(this->username, username, sizeof(this->username));
+        std::memset(this->username, 0, USERNAME_SIZE);
+        std::memcpy(this->username, username, username_lenght);
     }
 
     void serialize(std::vector<uint8_t>& buffer)
@@ -49,12 +58,15 @@ struct HandshakeM1
         std::memcpy(buffer.data() + position, this->ephemeral_key, EPHEMERAL_KEY_SIZE);
         position += EPHEMERAL_KEY_SIZE * sizeof(uint8_t);
 
+        std::memcpy(buffer.data() + position, &(this->username_size), sizeof(uint8_t));
+        position += sizeof(uint8_t);
+
         std::memcpy(buffer.data() + position, this->username, sizeof(this->username));
     }
 
-    static int GetSize() 
+    static inline int GetSize() 
     {
-        return sizeof(ephemeral_key_size) + sizeof(ephemeral_key) + sizeof(username);
+        return sizeof(ephemeral_key_size) + sizeof(ephemeral_key) + sizeof(username_size) + sizeof(username);
     }
 
     static HandshakeM1 Deserialize(std::vector<uint8_t>& buffer)
@@ -71,6 +83,9 @@ struct HandshakeM1
         std::memset(m1.ephemeral_key, 0, sizeof(ephemeral_key));
         std::memcpy(m1.ephemeral_key, reinterpret_cast<void*>(buffer.data() + position), sizeof(ephemeral_key));
         position += sizeof(uint8_t) * EPHEMERAL_KEY_SIZE;
+
+        m1.username_size = buffer[position];
+        position += sizeof(uint8_t);
 
         std::memset(m1.username, 0, sizeof(username));
         std::memcpy(m1.username, reinterpret_cast<void*>(buffer.data() + position), sizeof(username));

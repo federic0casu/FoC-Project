@@ -23,6 +23,5 @@ struct SessionMessage {
     std::vector<uint8_t> serialize() const;
     static SessionMessage deserialize(const std::vector<uint8_t>& buffer, const int ciphertext_size);
     static int get_size(int plaintext_size);
-    static void remove_garbage(std::vector<uint8_t>& vec, size_t lenght);
     void print() const;
 };

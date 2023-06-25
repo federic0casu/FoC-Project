@@ -6,7 +6,6 @@
 
 #include "DiffieHellman.hpp"
 
-using namespace std;
 
 DiffieHellman::DiffieHellman() 
 {

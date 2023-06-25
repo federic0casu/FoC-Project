@@ -14,6 +14,7 @@
 #include "../Packet/Balance.hpp"
 #include "../Packet/ClientReq.hpp"
 #include "../Packet/Handshake.hpp"
+#include "../Packet/Transfer.hpp"
 #include "../Packet/SessionMessage.hpp"
 
 #include "../Generic/Codes.hpp"

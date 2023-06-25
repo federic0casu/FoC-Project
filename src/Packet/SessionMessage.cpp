@@ -88,7 +88,7 @@ std::vector<uint8_t> SessionMessage::serialize() const
     // Serialize IV
     std::copy(iv.begin(), iv.end(), buffer.begin() + position);
     position += iv.size();
-#ifdef DEBUG
+#ifdef _DEBUG_
     std::cout << "--------------- " << RED_BOLD << "SERIALIZED SESSION MESSAGE" << RESET << " ---------------" << std::endl;
     std::cout << "SERIALIZED IV: ";
     for (long unsigned int i = 0; i < iv.size(); i++) {
@@ -99,7 +99,7 @@ std::vector<uint8_t> SessionMessage::serialize() const
 
     // Serialize ciphertext
     std::copy(ciphertext.begin(), ciphertext.end(), buffer.begin() + position);
-#ifdef DEBUG
+#ifdef _DEBUG_
     std::cout << "CIPHERTEXT: ";
     for (long unsigned int i = 0; i < ciphertext.size(); i++) {
         std::cout << std::hex << static_cast<int>(buffer[i + position]);
@@ -110,7 +110,7 @@ std::vector<uint8_t> SessionMessage::serialize() const
 
     // Serialize HMAC
     std::copy(hmac.begin(), hmac.end(), buffer.begin() + position);
-#ifdef DEBUG
+#ifdef _DEBUG_
     std::cout << "SERIALIZED HMAC: ";
     for (long unsigned int i = 0; i < hmac.size(); i++) {
         std::cout << std::hex << static_cast<int>(buffer[i + position]);
@@ -121,8 +121,6 @@ std::vector<uint8_t> SessionMessage::serialize() const
 
     return buffer;
 }
-
-
 
 SessionMessage SessionMessage::deserialize(const std::vector<uint8_t>& buffer, const int plaintext_size) 
 {
@@ -148,7 +146,8 @@ SessionMessage SessionMessage::deserialize(const std::vector<uint8_t>& buffer, c
 int SessionMessage::get_size(int plaintext_size) 
 {
     // calculate the ciphertext size
-    int ciphertext_size = plaintext_size + EVP_CIPHER_block_size(EVP_aes_256_cbc());
+    int block_size = EVP_CIPHER_block_size(EVP_aes_256_cbc());
+    int ciphertext_size = (plaintext_size % block_size == 0) ? plaintext_size : (plaintext_size + (block_size - (plaintext_size % block_size)));
 
     int size = 0;
 
@@ -178,18 +177,4 @@ void SessionMessage::print() const
         std::cout << std::hex << (int)hmac[i];
     std::cout << std::dec << std::endl;
     std::cout << "----------------------------------------------------------" << std::endl;
-}
-
-void SessionMessage::remove_garbage(std::vector<uint8_t>& vec, size_t lenght) {
-    if (vec.size() < lenght) {
-        // Vector size is smaller than lenght
-        return;
-    }
-    // Check if the last 'lenght' elements are all zero
-    auto rbegin = vec.rbegin();
-    auto rend = vec.rbegin() + lenght;
-    if (std::all_of(rbegin, rend, [](uint8_t element) { return element == 0; })) {
-        // Erase the last lenght elements
-        vec.erase(vec.end() - lenght, vec.end());
-    }
 }

@@ -5,7 +5,7 @@ std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> " \
           <<  GREEN_BOLD << "[OK] " << RESET << message << std::endl; \
 
 
-Worker::Worker(jobs_t* jobs) 
+Worker::Worker(jobs_t* jobs) : max_list_transfers(4)
 {
     this->jobs = jobs;
     this->iv.resize(AES_BLOCK_SIZE);
@@ -69,7 +69,7 @@ void Worker::Run()
                         break;
                     }
                     case CODE_TRANSFER_REQUEST: {
-                        TransferHandler();
+                        TransferHandler(request.recipient, request.amount);
                         break;
                     }
                     case CODE_LIST_REQUEST: {
@@ -96,7 +96,6 @@ void Worker::Run()
             continue;
         }
     }
-
 }
 
 ClientReq Worker::RequestHandler()
@@ -132,25 +131,29 @@ void Worker::BalanceHandler()
             << "balance (socket: " 
             << client_socket << ")." << std::endl;
     #endif
-}
 
-void Worker::TransferHandler()
-{
+    // Get user's balance
+    FileManager manager;
+    char* file_path = new char[sizeof("../res/archive/account/") + this->username.length() + sizeof(".txt") + 1];
+    std::sprintf(file_path, "../res/archive/account/%s.txt", this->username.c_str());
+    manager.FindUser(file_path);
+    delete file_path;
+
+    int amount = manager.GetAmount();
+
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-            << "transfer (socket: " 
-            << client_socket << ")." << std::endl;
-    #endif
-}
+    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> Balance (user: " << std::string(this->username.begin(), this->username.end()) << "): " << amount << std::endl;
+    #endif 
 
-void Worker::ListHandler()
-{
-    std::vector<row_data_t> list = ListByUsername("transactions/Alice.txt");
-    unsigned int n = list.size(); 
-    
-    List response(CODE_LIST_RESPONSE_1, n);
-    std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE);
-    response.serialize(plaintext);
+    BalanceResponse balance_resp(this->counter, amount);
+
+    std::cout << "risposta: " << balance_resp.counter << balance_resp.balance << std::endl;
+
+    std::vector<uint8_t> plaintext(BALANCE_RESPONSE_SIZE);
+    plaintext.assign(plaintext.size(),0);
+    balance_resp.serialize(plaintext.data());
+
+    std::cout << plaintext.data() << std::endl; 
 
     SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
     
@@ -163,38 +166,156 @@ void Worker::ListHandler()
     std::vector<uint8_t> to_send = encrypted_response.serialize();
     Send(to_send);
 
-    plaintext.clear();
-    plaintext.resize(LIST_RESPONSE_2_SIZE);
- 
-    for (row_data_t& transaction : list)
+    return;
+}
+
+void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
+{
+    cout << "TransferHandler(): recipient is: " << recipient << endl;
+
+    // verifica se il recipient esiste
+    std::string dest_usr(reinterpret_cast<const char *>(recipient));
+    std::string account_file_path = "../res/archive/account/" + dest_usr + ".txt";
+    
+    FileManager dest_user_file;
+    if (!dest_user_file.FindUser(account_file_path)) {
+        cout << "TransferHandler(): Non sono riuscito ad aprire il file del detinatario, nome: " << dest_usr << endl;
+        // TODO: Manda messaggio di risposta
+        SendTransferResponse(false);
+        return;
+    }
+
+    // Apri il file del sender e verifica se ha abbastanza soldi
+    std::string src_username(reinterpret_cast<const char *>(this->username.c_str()), this->username.length());
+    // std::cout << "dimensione attributo username" << sizeof(this->username) << endl;
+    std::string src_account_file_path = "../res/archive/account/" + src_username + ".txt";
+    uint8_t buffer[sizeof("../res/archive/account/") + 32 + sizeof(".txt")];
+    sprintf(reinterpret_cast<char*>(buffer), "../res/archive/account/%s.txt", this->username.c_str());
+
+    // std::cout << "dimstringa: " << src_account_file_path.length() << "dimcaratteri: " << src_account_file_path.size() << std::endl;
+
+    FileManager src_user_file;
+    std::string path(reinterpret_cast<const char*>(buffer), sizeof(buffer));
+    if (!src_user_file.FindUser(path))
     {
-        List response(CODE_LIST_RESPONSE_2, 
-                    transaction.amount, 
-                    reinterpret_cast<uint8_t*>(const_cast<char*>(transaction.dest.data())), 
-                    sizeof(uint8_t[USER_SIZE]), 
-                    reinterpret_cast<std::time_t>(transaction.timestamp));
-        response.serialize(plaintext);
+        cout << "TransferHandler(): Non sono riuscito ad aprire il file del sorgente, nome: " << src_username << endl;
+        // TODO: Manda messaggio di risposta
+        SendTransferResponse(false);
+        return;
+    }
+
+    int src_amount = src_user_file.GetAmount();
+    if (src_amount < msg_amount) {
+        // Non ho abbastanza soldi per mandare la transazione
+        cout << "TransferHandler(): Il sender non ha abbastanza soldi per eseguire la transazione" << endl;
+        // TODO: Manda messaggio di risposta
+        SendTransferResponse(false);
+        return;
+    }
+
+    int new_src_amount = src_amount - msg_amount;
+    int new_dest_amount = dest_user_file.GetAmount() + msg_amount;
+
+    // Aggiorna amount del sender e amount del destinatario
+    if (!src_user_file.SetAmount(new_src_amount)) {
+        cout << "TransferHandler(): Non sono riuscito a settare il nuovo amount del src" << endl;
+        SendTransferResponse(false);
+
+        return;
+    }
+
+    if (!dest_user_file.SetAmount(new_dest_amount)) {
+        cout << "TransferHandler(): Non sono riuscito a settare il nuovo amount del dest" << endl;
+        SendTransferResponse(false);
+
+        return;
+    }
+
+    // Scrivi transazione sul sender
+
+    // apri il file del sender e scrivici la transazione
+
+    string transfer_file_path = "../res/archive/transfers/" + src_username + ".txt";
+
+    std::cout << "path della transfer" << transfer_file_path << std::endl;
+
+    // Scrivi sul file delle transfer dell'utente src
+
+    TransferManager transfer;
+    transfer.writeTransfer(transfer_file_path, msg_amount, dest_usr);
+    transfer.readTransfer(transfer_file_path);
+    cout << "Numero di transferimenti bancari eseguiti da " << src_username << transfer.getTransferCount(transfer_file_path) << std::endl;
+
+    SendTransferResponse(true);
+}
+
+
+void Worker::ListHandler()
+{
+    /*-------- PARTE 1 : MANDA IL NUMERO DI TRANSAZIONI CHE SPEDIRAI --------*/
+
+    // prendi il nome dell'utente e calcola la path
+    std::string src_username(reinterpret_cast<const char *>(username.c_str()));
+    string file_path = "../res/archive/transfers/" + src_username + ".txt";
+
+    // calcola il numero di trasferimenti e mandalo 
+    TransferManager transfer;
+    int transaction_num = transfer.getTransferCount(file_path);
+
+    if (transaction_num >= this->max_list_transfers)
+        transaction_num = this->max_list_transfers;
+
+    ListM1 listm1(this->counter, transaction_num);
+
+    std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE);
+    listm1.serialize(plaintext.data());
+
+    SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
+    std::vector<uint8_t> to_send = encrypted_response.serialize();
+    Send(to_send);
+
+    to_send.clear();
+    /*------------------- PARTE 2 : MANDA LE TRANSAZIONI -----------------*/
+
+    for (int i = 0; i < transaction_num; i++) {
+
+        std::string row_to_deserialize = transfer.readNextTransfer(i,file_path);
+
+        // deserializza e manda il messaggio
+
+        std::stringstream ss(row_to_deserialize);
+        std::string field;
+
+        ListM2 listm2;
+
+        // DESERIALIZZA LA STRINGA 
+
+        std::getline(ss, field, ':');
+        std::memcpy(listm2.recipient, field.c_str(), sizeof(listm2.recipient));
+
+        std::getline(ss, field, ':');
+        listm2.amount = std::stol(field); 
+
+        std::getline(ss, field, ':');
+        listm2.timestamp = std::stoll(field);
+
+        listm2.counter = counter;
+
+        std::cout << "Worker(): " << std::endl;
+        listm2.print();
+        // SPEDISCI
+        std::vector<uint8_t> plaintext(LIST_RESPONSE_2_SIZE);
+        listm2.serialize(plaintext.data());
 
         SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
-    
-        #ifdef DEBUG
-        std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-                    << "Sending encrypted message..." << std::endl;
-        encrypted_response.print();
-        #endif
-
         std::vector<uint8_t> to_send = encrypted_response.serialize();
         Send(to_send);
 
-        plaintext.clear();
-        plaintext.resize(LIST_RESPONSE_2_SIZE);
     }
 }
 
-void Worker::Handshake() {
-
-    // ---------------------- RECEIVING M1 ---------------------- //
-    
+void Worker::Handshake() 
+{    
     // Allocate a buffer to receive M1 message.
     std::vector<uint8_t> serialized_m1(HandshakeM1::GetSize());
     try {
@@ -209,18 +330,8 @@ void Worker::Handshake() {
     // Deserialize M1
     HandshakeM1 m1 = HandshakeM1::Deserialize(serialized_m1);
 
-    // ---------------------------------------------------------- //
-
-
-    // -------------------------- CLIENT EXISTS (?) ------------------------- //
-
-    if (!ClientExists(m1.username, sizeof(m1.username)))
+    if (!ClientExists(m1.username, m1.username_size))
         return;
-
-    // --------------------------------------------------------------------- //
-
-
-    // --------------------------- EPHEMERAL KEY --------------------------- // 
     
     DiffieHellman* dh = nullptr;
     EVP_PKEY* ephemeral_key = nullptr;
@@ -246,11 +357,6 @@ void Worker::Handshake() {
         
         throw error;
     }
-
-    // --------------------------------------------------------------------- //
-
-
-    // ---------------------- SESSION KEYS GENERATION ---------------------- //
 
     // generate the shared secret
     std::vector<uint8_t> shared_secret;
@@ -297,11 +403,6 @@ void Worker::Handshake() {
     
     std::memset(reinterpret_cast<void*>(keys.data()), 0, keys.size());
     keys.clear();
-    
-    // --------------------------------------------------------------------- //
-   
-
-    // -------------------- SERIALIZE OWN EPHEMERAL KEY -------------------- //
     
     std::vector<uint8_t> serialized_ephemeral_key;
     try {
@@ -475,7 +576,10 @@ void Worker::Handshake() {
 ssize_t Worker::Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size) {
     ssize_t total_bytes_received = 0;
 
-    while (total_bytes_received < buffer_size) {
+    LOG("recv() >> expected bytes: " << buffer_size)
+
+    while (total_bytes_received < buffer_size) 
+    {
         ssize_t bytes_received = recv(client_socket, (void*)(buffer.data() + total_bytes_received), buffer_size - total_bytes_received, 0);
 
         if (bytes_received == -1)
@@ -489,6 +593,7 @@ ssize_t Worker::Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size) {
         }
 
         total_bytes_received += bytes_received;
+        LOG("total_bytes_received: " << total_bytes_received)
     }
     return total_bytes_received;
 }
@@ -497,7 +602,8 @@ ssize_t Worker::Send(const std::vector<uint8_t>& buffer) {
     ssize_t total_bytes_sent = 0;
     ssize_t buffer_size = buffer.size();
 
-    while (total_bytes_sent < buffer_size) {
+    while (total_bytes_sent < buffer_size) 
+    {
         ssize_t bytes_sent = send(client_socket, (void*)(buffer.data() + total_bytes_sent), buffer_size - total_bytes_sent, 0);
 
         if (bytes_sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
@@ -510,6 +616,7 @@ ssize_t Worker::Send(const std::vector<uint8_t>& buffer) {
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to send data.");
 
         total_bytes_sent += bytes_sent;
+        LOG("total_bytes_sent: " << total_bytes_sent)
     }
 
     return total_bytes_sent;
@@ -536,7 +643,7 @@ bool Worker::ClientExists(uint8_t* username, ssize_t username_size)
             throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to read client public key (Client does not exist?).");
         LOG("PEM_read_bio_PUBKEY(bp, ...)")
 
-        std::memcpy(reinterpret_cast<void*>(this->username.data()), username, username_size);
+        this->username = std::string(reinterpret_cast<const char*>(username), username_size);
     } catch(const std::runtime_error& error) {
         // Client does not exist
         std::cerr << error.what() << std::endl;
@@ -564,39 +671,20 @@ bool Worker::ClientExists(uint8_t* username, ssize_t username_size)
     return true;
 }
 
-std::vector<row_data_t> Worker::ListByUsername(const std::string& filename)
-{
-    std::vector<row_data_t> rows;
-    std::ifstream file(filename);
+void Worker::SendTransferResponse(bool outcome) {
 
-    if (!file.is_open())
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to open the file.");
+    // manda la transfer response in base all'outcome S - Success, D - Denied
+    std::string transfer_outcome = (outcome) ? "S" : "D";
 
-    std::string line;
-    while (std::getline(file, line)) 
-    {
-        row_data_t row;
-        row.dest = "";
-        std::istringstream iss(line);
-        if (iss >> row.dest >> row.amount >> row.timestamp)
-            rows.push_back(row);
-        else
-            throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to parse a line in the file.");
-    }
+    TransferResponse transfer_response((char)transfer_outcome[0], this->counter);
+    std::cout << "TransferHandler: risposta " << transfer_response.outcome  << std::endl;
 
-    file.close();
-    return rows;
-}
+    std::vector<uint8_t> plaintext(TRANSFER_RESPONSE_SIZE);
+    plaintext.assign(plaintext.size(), 0);
+    transfer_response.serialize(plaintext.data());
 
+    SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
 
-void Worker::AppendTransactionByUsername(const std::string& filename, const row_data_t& row)
-{
-    std::ofstream file(filename, std::ios::app);
-
-    if (!file.is_open())
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to open the file for appending.");
-
-    file << row.dest << " " << row.amount << " " << row.timestamp << "\n";
-
-    file.close();
+    std::vector<uint8_t> to_send = encrypted_response.serialize();
+    Send(to_send);
 }

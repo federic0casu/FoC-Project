@@ -24,6 +24,7 @@
 class AES_CBC {
 public:
     AES_CBC(uint8_t type, const std::vector<uint8_t>& key);
+    AES_CBC(uint8_t type, const std::vector<uint8_t>& key, const bool iv);
     AES_CBC(const AES_CBC&) = delete;
     ~AES_CBC();
     void run(const std::vector<uint8_t>& input_buffer, std::vector<uint8_t>& output_buffer, std::vector<uint8_t>& iv);
@@ -36,6 +37,8 @@ private:
     std::vector<uint8_t> plaintext;
     std::vector<uint8_t> ciphertext;
     uint32_t processed_bytes;
+
+    bool iv_type;
 
     EVP_CIPHER_CTX* ctx;
 

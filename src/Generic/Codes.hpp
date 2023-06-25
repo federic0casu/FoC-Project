@@ -16,3 +16,5 @@
 #define LIST_RESPONSE_2_SIZE	sizeof(uint16_t) + sizeof(uint8_t[RECIPIENT_SIZE]) + sizeof(uint32_t) + sizeof(uint32_t)
 
 #define DECRYPTED_SIGNATURE_SIZE 256
+
+#define TRANSFER_RESPONSE_SIZE sizeof(uint8_t) + sizeof(uint32_t)

@@ -23,7 +23,7 @@ struct ClientReq {
     this->amount = amount;
   }
 
-  ClientReq(uint16_t request_code, uint32_t amount, uint8_t* recipient)
+  ClientReq(uint16_t request_code, uint32_t amount, const char* recipient)
   {
     this->request_code = request_code;
     memcpy((void*) this->recipient, (void*) recipient, RECIPIENT_SIZE);

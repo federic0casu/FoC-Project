@@ -22,12 +22,18 @@
 #include "../Crypto/DiffieHellman.hpp"
 
 #include "../Packet/List.hpp"
-#include "../Packet/ClientReq.hpp"
+#include "../Packet/Balance.hpp"
+#include "../Packet/Transfer.hpp"
 #include "../Packet/Handshake.hpp"
+#include "../Packet/ClientReq.hpp"
 #include "../Packet/SessionMessage.hpp"
 
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
+#include "../Utility/FileManager.hpp"
+#include "../Utility/TransferManager.hpp"
+
+
 
 #define SESSION_KEY_LENGHT 256
 
@@ -38,18 +44,6 @@ struct jobs {
     std::condition_variable socket_cv;
 };
 typedef struct jobs jobs_t;
-
-struct row_data {
-    std::string dest;
-    int amount;
-    long timestamp;
-
-    row_data() {}
-
-    row_data(const std::string& destination, int amt, long ts) 
-        : dest(destination), amount(amt), timestamp(ts) {}
-};
-typedef struct row_data row_data_t;
 
 class Worker {
 
@@ -64,8 +58,9 @@ private:
     std::vector<uint8_t> iv;
     std::vector<uint8_t> hmac_key;
     std::vector<uint8_t> session_key;
-    std::vector<uint8_t> username;
+    std::string username;
     uint8_t counter;
+    uint32_t max_list_transfers;
     const std::string server_private_key_path = "../res/private_keys/server_privkey.pem";
     
     int client_socket;
@@ -82,9 +77,9 @@ private:
     // Worker Logic
     ClientReq RequestHandler();
     void ListHandler();
-    void TransferHandler();
+    void TransferHandler(uint8_t* recipient, uint32_t msg_amount);
     void BalanceHandler();
 
-    std::vector<row_data_t> ListByUsername(const std::string& filename);
-    void AppendTransactionByUsername(const std::string& filename, const row_data_t& row);
+    // Utility
+    void SendTransferResponse(bool outcome);
 };

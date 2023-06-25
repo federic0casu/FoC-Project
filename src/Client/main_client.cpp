@@ -18,8 +18,8 @@ int main(int argc, char* argv[])
 
         // test
         client.balance();
-        //client.transfer();
-        //client.list();
+        client.transfer();
+        client.list();
     } 
     catch (const std::runtime_error& e) {
         std::cerr << e.what() << std::endl;

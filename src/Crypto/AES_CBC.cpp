@@ -1,7 +1,16 @@
 #include "AES_CBC.hpp"
 
 
-AES_CBC::AES_CBC(uint8_t type, const std::vector<uint8_t>& session_key) : type(type), processed_bytes(0)
+AES_CBC::AES_CBC(uint8_t type, const std::vector<uint8_t>& session_key) : type(type), processed_bytes(0), iv_type(false)
+{
+    if (type != ENCRYPT && type != DECRYPT)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::AES_CBC() >> Invalid type specified.");
+
+    this->key.resize(session_key.size());
+    std::copy(session_key.begin(), session_key.end(), this->key.begin());
+}
+
+AES_CBC::AES_CBC(uint8_t type, const std::vector<uint8_t>& session_key, const bool iv) : type(type), processed_bytes(0), iv_type(iv)
 {
     if (type != ENCRYPT && type != DECRYPT)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::AES_CBC() >> Invalid type specified.");
@@ -38,8 +47,13 @@ void AES_CBC::initializeEncrypt()
     RAND_poll();
 
     // Generate IV
-    if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), static_cast<int>(iv.size())) != 1)
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeEncrypt() >> Failed to generate random bytes for IV.");
+    if (iv_type == true)
+        // genera iv constante
+        this->iv.assign(this->iv.size(), 0);
+    else {
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), static_cast<int>(iv.size())) != 1)
+            throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::initializeEncrypt() >> Failed to generate random bytes for IV.");
+    }
 
     // Check for possible integer overflow in (plaintext_size + block_size) --> PADDING!
     if (plaintext.size() > INT_MAX - block_size)
@@ -57,10 +71,8 @@ void AES_CBC::initializeEncrypt()
 void AES_CBC::updateEncrypt()
 {
     int update_len = 0;
-    if (EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()), &update_len, reinterpret_cast<const unsigned char*>(plaintext.data()), static_cast<int>(plaintext.size())) != 1) {
-        
+    if (EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()), &update_len, reinterpret_cast<const unsigned char*>(plaintext.data()), static_cast<int>(plaintext.size())) != 1)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m AES_CBC::updateEncrypt() >> Encryption update failed.");
-    }
 
     processed_bytes += update_len;
 }
@@ -131,7 +143,6 @@ void AES_CBC::finalizeDecrypt()
         }
 
     }
-
     processed_bytes += final_len;
 }
 
