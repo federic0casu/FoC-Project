@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include <unistd.h>
+#include <termios.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -47,6 +48,7 @@ private:
 
     std::string m_username;
 
-    EVP_PKEY* get_private_key();
+    void turnOffEcho();
+    void turnOnEcho();
     void print_formatted_date(std::time_t timestamp);
 };

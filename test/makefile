@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++14
+CXXFLAGS = -std=c++14 -Wno-deprecated-declarations
 LIBS = -lssl -lcrypto -pthread
 
 SERVER_SRCS = ../src/Server/Server.cpp ../src/Server/main_server.cpp ../src/Server/Worker.cpp

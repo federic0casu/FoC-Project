@@ -42,66 +42,46 @@ void Client::connect_to_server()
 
 void Client::balance()
 {
-    try
-    {
-        const char padding[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
-        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding);
+    const char padding[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding);
 
-#ifdef DEBUG
-        std::cout << "[1] balance ->\t"
-                  << balance_request.request_code << ":"
-                  << balance_request.recipient << ":"
-                  << balance_request.amount << std::endl;
-#endif
+    std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
+    balance_request.serialize(plaintext);
 
-        std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
-        balance_request.serialize(plaintext);
+    SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
 
-        SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
+    std::memset(reinterpret_cast<void *>(plaintext.data()), 0, plaintext.size());
+    plaintext.clear();
 
-        std::memset(reinterpret_cast<void *>(plaintext.data()), 0, plaintext.size());
-        plaintext.clear();
+    try {
+        std::vector<uint8_t> to_send = encrypted_request.serialize();
+        send_to_server(to_send);
 
-#ifdef _DEBUG_
-        std::cout << "Sending encrypted message..." << std::endl;
-        encrypted_request.print();
-#endif
-
-        try
-        {
-            std::vector<uint8_t> to_send = encrypted_request.serialize();
-            send_to_server(to_send);
-            std::memset(reinterpret_cast<void *>(to_send.data()), 0, to_send.size());
-            to_send.clear();
-        }
-        catch (const std::runtime_error &error)
-        {
-            std::cerr << error.what() << std::endl;
-            std::cout << "Please, try again..." << std::endl;
-            return;
-        }
-
-        std::vector<uint8_t> buffer(SessionMessage::get_size(BALANCE_RESPONSE_SIZE));
-        recv_from_server(buffer);
-
-        SessionMessage encrypted_response = SessionMessage::deserialize(buffer, BALANCE_RESPONSE_SIZE);
-
-#ifdef _DEBUG_
-        std::cout << "Incoming encrypted message..." << std::endl;
-        encrypted_response.print();
-#endif
-
-        plaintext.resize(BALANCE_RESPONSE_SIZE);
-        plaintext.assign(plaintext.size(), 0);
-        encrypted_response.decrypt(this->session_key, plaintext);
-
-        BalanceResponse response = BalanceResponse::deserialize(plaintext.data());
-        response.print();
+        std::memset(reinterpret_cast<void *>(to_send.data()), 0, to_send.size());
+        to_send.clear();
+    } catch (const std::runtime_error &ex) {
+        std::cerr << ex.what() << std::endl;
+        std::cout << "Please, try again..." << std::endl;
+        return;
     }
-    catch (std::runtime_error &e)
-    {
-        throw e;
+
+    std::vector<uint8_t> buffer(SessionMessage::get_size(BALANCE_RESPONSE_SIZE));
+    try {
+        recv_from_server(buffer); 
+    } catch (const std::runtime_error &ex) {
+        std::cerr << ex.what() << std::endl;
+        std::cout << "Please, try again..." << std::endl;
+        return;
     }
+
+    SessionMessage encrypted_response = SessionMessage::deserialize(buffer, BALANCE_RESPONSE_SIZE);
+
+    plaintext.resize(BALANCE_RESPONSE_SIZE);
+    plaintext.assign(plaintext.size(), 0);
+    encrypted_response.decrypt(this->session_key, plaintext);
+
+    BalanceResponse response = BalanceResponse::deserialize(plaintext);
+    response.print();
 }
 
 void Client::transfer()
@@ -111,26 +91,17 @@ void Client::transfer()
         std::string dest;
         uint32_t amount;
 
-        std::cout << "Insert dest: ";
+        std::cout << ">> Insert payee: ";
         std::cin >> dest;
-        std::cout << "Insert amount: ";
+        std::cout << ">> Insert amount: ";
         std::cin >> amount;
 
         ClientReq transfer_request(CODE_TRANSFER_REQUEST, amount, dest.c_str());
-
-#ifdef DEBUG
-        std::cout << "[1] transfer ->\t" << transfer_request.request_code << ":" << transfer_request.recipient << ":" << transfer_request.amount << std::endl;
-#endif
 
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         transfer_request.serialize(plaintext);
 
         SessionMessage encrypted_request(session_key, hmac_key, plaintext);
-
-#ifdef DEBUG
-        std::cout << "Sending encrypted message..." << std::endl;
-        encrypted_request.print();
-#endif
 
         std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
@@ -212,8 +183,26 @@ void Client::handshake()
     std::string password;
     std::cout << ">> Insert username: ";
     std::cin >> m_username;
+    getchar(); // To delete the '\n' character
     std::cout << ">> Insert password: ";
-    std::cin >> password;
+
+    // Read password with asterisks
+    char ch;
+    do {
+        turnOffEcho();
+        ch = getchar();
+        turnOnEcho();
+        if (ch == 127) {  // Handle backspace
+            if (!password.empty()) {
+                password.pop_back();
+                std::cout << "\b \b";  // Move cursor back, erase character, move cursor back again
+            }
+        } else {
+            password += ch;
+            std::cout << '*';
+        }
+    } while(ch != '\n' && ch != '\r');
+    std::cout << std::endl;
 
     DiffieHellman dh;
     EVP_PKEY *ephemeral_key = nullptr;
@@ -568,4 +557,20 @@ void Client::print_formatted_date(std::time_t timestamp)
                   << std::setfill('0') << std::setw(2) << timeinfo->tm_hour << ":"       // Hour
                   << std::setfill('0') << std::setw(2) << timeinfo->tm_min << std::endl; // Minute
     }
+}
+
+// Function to turn off console echo
+void Client::turnOffEcho() {
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag &= ~ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+// Function to turn on console echo
+void Client::turnOnEcho() {
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag |= ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term);
 }

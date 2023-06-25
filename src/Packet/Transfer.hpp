@@ -11,22 +11,21 @@ struct TransferResponse {
     uint8_t outcome;
     uint32_t counter;
 
+    TransferResponse() {}
 
-    TransferResponse(){}
-    TransferResponse(char resp, uint32_t counter){
+    TransferResponse(char resp, uint32_t counter) {
         this->counter = counter;
         this->outcome = resp;
     }
 
-
-    void serialize (uint8_t *buffer) {
+    void serialize (std::vector<uint8_t>& buffer) {
         size_t position = 0;
 
-        memcpy(buffer, &this->outcome, sizeof(uint8_t));
+        std::memcpy(reinterpret_cast<void*>(buffer.data()), &this->outcome, sizeof(uint8_t));
         position += sizeof(uint8_t);
 
         uint32_t counter_network = htonl(this->counter);
-        memcpy(buffer + position, &counter_network, sizeof(uint32_t));
+        std::memcpy(reinterpret_cast<void*>(buffer.data() + position), &counter_network, sizeof(uint32_t));
     }
 
     static TransferResponse deserialize(uint8_t * buffer) {
@@ -45,9 +44,9 @@ struct TransferResponse {
     }
 
       void print() const {
-        cout << "--------- TRANSFER RESPONSE --------" << endl;
-        cout << "RESPONSE: " << this->outcome << endl;
-        cout << "COUNTER:" << counter << endl;
-        cout << "------- END REQUEST MESSAGGE ----------" << endl;
+        std::cout << "--------- TRANSFER RESPONSE --------" << std::endl;
+        std::cout << "RESPONSE: " << this->outcome << std::endl;
+        std::cout << "COUNTER:" << counter << std::endl;
+        std::cout << "------- END REQUEST MESSAGGE ----------" << std::endl;
     }
 };

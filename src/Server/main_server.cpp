@@ -51,7 +51,5 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    std::cout << std::endl << "Bye Bye..." << std::endl;
-
     return 0;
 }
