@@ -30,18 +30,18 @@ public:
     int getTransferCount(std::string file_path);
     std::string readNextTransfer(int row_position, std::string file_path);
 
-static void stringToVector(std::string &str, std::vector<uint8_t> &vec, long unsigned int size)
-{
-    for (long unsigned int i = 0; i < size && i < str.length(); i++)
-        vec[i] = static_cast<uint8_t>(str[i]);
-}
+    static void stringToVector(std::string &str, std::vector<uint8_t> &vec, long unsigned int size) {
+        for (long unsigned int i = 0; i < size && i < str.length(); i++)
+            vec[i] = static_cast<uint8_t>(str[i]);
+    }
 
-static std::string vectorToString(std::vector<uint8_t> vec) {
-        std::string str;
-        for (const auto& elem : vec)
-            str += static_cast<char>(elem);
-        return str;
-}
+    static std::string vectorToString(std::vector<uint8_t> vec) {
+            std::string str;
+            for (const auto& elem : vec)
+                str += static_cast<char>(elem);
+            return str;
+    }
+
 private:
     std::string file_path; 
 };

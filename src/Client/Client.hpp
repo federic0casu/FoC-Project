@@ -50,5 +50,4 @@ private:
 
     void turnOffEcho();
     void turnOnEcho();
-    void print_formatted_date(std::time_t timestamp);
 };

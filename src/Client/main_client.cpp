@@ -42,8 +42,8 @@ int main(int argc, char* argv[])
                 default : std::cout << "Operation not known. Please, try again..." << std::endl;
             }
         } while (cmd != 0);
-    } catch (const std::runtime_error& e) {
-        std::cerr << e.what() << std::endl;
+    } catch (const std::runtime_error& ex) {
+        std::cerr << ex.what() << std::endl;
         return -1;
     }
     std::cout << std::endl << "Bye Bye..." << std::endl;

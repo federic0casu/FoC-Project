@@ -1,5 +1,6 @@
 #include <ctime>
 #include <vector>
+#include <iomanip>
 #include <cstring>
 
 #include <string.h>
@@ -7,131 +8,128 @@
 
 #define USER_SIZE   32 
 
-#define HTONLL(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
-#define NTOHLL(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
-
 struct ListM1 {
     uint32_t transaction_num;
     uint32_t counter;
 
     ListM1 () {}
 
-    ListM1 (uint32_t counter, uint32_t transaction_num) {
-        this->counter = counter;
-        this->transaction_num = transaction_num;
-    }
+    ListM1 (uint32_t __counter, uint32_t __transaction_num) : transaction_num(__transaction_num), counter(__counter) {}
 
-    void serialize(uint8_t * buffer) {
+    void serialize(std::vector<uint8_t>& buffer) {
         size_t position = 0;
 
         uint32_t transaction_num_network = htonl(this->transaction_num);
-        memcpy(buffer, &transaction_num_network, sizeof(uint32_t));
+        std::memcpy(reinterpret_cast<void*>(buffer.data()), &transaction_num_network, sizeof(uint32_t));
         position += sizeof(uint32_t);
 
         uint32_t counter_network = htonl(this->counter);
-        memcpy(buffer + position, &counter_network, sizeof(uint32_t));
+        std::memcpy(reinterpret_cast<void*>(buffer.data() + position), &counter_network, sizeof(uint32_t));
 
         return;
     }
 
-    static ListM1 deserialize(uint8_t * buffer) {
-        ListM1 listm1;
+    static ListM1 deserialize(std::vector<uint8_t>& buffer) {
+        ListM1 listM1;
 
         size_t position = 0;
         uint32_t transaction_num_network = 0;
-        memcpy(&transaction_num_network, buffer, sizeof(uint32_t));
-        listm1.transaction_num = ntohl(transaction_num_network);
+        std::memcpy(reinterpret_cast<void*>(&transaction_num_network), reinterpret_cast<const void*>(buffer.data()), sizeof(uint32_t));
+        listM1.transaction_num = ntohl(transaction_num_network);
 
         position += sizeof(uint32_t);
 
         uint32_t counter_network = 0;
-        memcpy(&counter_network, buffer, sizeof(uint32_t));
-        listm1.counter = ntohl(counter_network);
+        std::memcpy(reinterpret_cast<void*>(&counter_network), reinterpret_cast<const void*>(buffer.data() + position), sizeof(uint32_t));
+        listM1.counter = ntohl(counter_network);
 
-        return listm1;
+        return listM1;
         }
 
-    static uint32_t getSize() {
-        return sizeof(uint32_t) + sizeof(uint32_t);
-    }
+    static uint32_t getSize() { return sizeof(uint32_t) + sizeof(uint32_t); }
 
     void print() {
         std::cout << "--------- LIST M1 MESSAGE -----------" << std::endl;
-        std::cout << "TRANSATIONS: " << this->transaction_num << "  -----------" << std::endl;
+        std::cout << "TRANSATIONS: " << this->transaction_num << std::endl;
+        std::cout << "-------------------------------------" << std::endl;
     }
 };
 
 
 struct ListM2 {
     uint32_t counter; 
-    uint64_t timestamp;
+    uint32_t timestamp;
     uint32_t amount;
-    uint8_t recipient[USER_SIZE];
+    uint8_t  recipient[USER_SIZE];
 
-    ListM2(){}
-
-    ListM2(uint32_t counter, uint64_t timestamp, uint32_t amount, uint8_t * recipient) {
-        this->counter = counter;
-        this->timestamp = timestamp;
-        this->amount = amount;
-        memset(this->recipient, 0, sizeof(this->recipient));
-        memcpy(this->recipient, recipient, sizeof(this->recipient));
+    ListM2() : counter(0), timestamp(0), amount(0) {
+        std::memset(reinterpret_cast<void*>(recipient), 0, sizeof(recipient));
     }
 
-    void serialize(uint8_t * buffer) {
+    ListM2(uint32_t __counter, uint64_t __timestamp, uint32_t __amount, std::vector<uint8_t>& recipient) : counter(__counter), timestamp(__timestamp), amount(__amount) {
+        std::memset(reinterpret_cast<void*>(this->recipient), 0, sizeof(this->recipient));
+        std::memcpy(reinterpret_cast<void*>(this->recipient), reinterpret_cast<const void*>(recipient.data()), sizeof(this->recipient));
+    }
+
+    void serialize(std::vector<uint8_t>& buffer) {
+        buffer.resize(sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(this->recipient));
+
         size_t position = 0;
 
         uint32_t counter_network = htonl(this->counter);
-        memcpy(buffer, &counter_network, sizeof(uint32_t));
+        std::memcpy(reinterpret_cast<void*>(buffer.data()), reinterpret_cast<const void*>(&counter_network), sizeof(uint32_t));
         position += sizeof(uint32_t);
 
-        uint64_t timestamp_network = HTONLL(this->timestamp);
-        memcpy(buffer + position, &timestamp_network, sizeof(this->timestamp));
-        position += sizeof(uint64_t);
+        uint32_t timestamp_net = htonl(static_cast<uint32_t>(this->timestamp));
+        std::memcpy(reinterpret_cast<void*>(buffer.data() + position), reinterpret_cast<const void*>(&timestamp_net), sizeof(uint32_t));
+        position += sizeof(uint32_t);
 
         uint32_t amount_network = htonl(this->amount);
-        memcpy(buffer + position, &amount_network, sizeof(this->amount));
+        std::memcpy(reinterpret_cast<void*>(buffer.data() + position), reinterpret_cast<const void*>(&amount_network), sizeof(this->amount));
         position += sizeof(uint32_t);
 
-        memcpy(buffer + position, this->recipient, sizeof(this->recipient));
+        std::memcpy(reinterpret_cast<void*>(buffer.data() + position), reinterpret_cast<const void*>(this->recipient), sizeof(this->recipient));
     }
 
-    static ListM2 deserialize(uint8_t * buffer) {
-        ListM2 listm2;
+    static ListM2 deserialize(std::vector<uint8_t>& buffer) {
+        ListM2 listM2;
 
         size_t position = 0;
 
         uint32_t counter_network = 0;
-        memcpy(&counter_network, buffer, sizeof(uint32_t));
-        listm2.counter = ntohl(counter_network);
+        std::memcpy(reinterpret_cast<void*>(&counter_network), reinterpret_cast<const void*>(buffer.data()), sizeof(listM2.counter));
+        listM2.counter = ntohl(counter_network);
         position += sizeof(uint32_t);
-    
 
-        uint64_t timestamp_network = 0;
-        memcpy(&timestamp_network, buffer + position, sizeof(uint64_t));
-        listm2.timestamp = NTOHLL(timestamp_network);
-        position += sizeof(uint64_t);
-    
+        uint32_t timestamp_net = 0;
+        std::memcpy(reinterpret_cast<void*>(&timestamp_net), reinterpret_cast<const void*>(buffer.data() + position), sizeof(listM2.timestamp));
+        listM2.timestamp = ntohl(timestamp_net);
+        position += sizeof(uint32_t);
 
         uint32_t amount_network = 0;
-        memcpy(&amount_network, buffer + position, sizeof(uint32_t));
-        listm2.amount = ntohl(amount_network);
+        std::memcpy(reinterpret_cast<void*>(&amount_network), reinterpret_cast<void*>(buffer.data() + position), sizeof(listM2.amount));
+        listM2.amount = ntohl(amount_network);
         position += sizeof(uint32_t);
 
-        memcpy(listm2.recipient, buffer + position, sizeof(listm2.recipient));
+        std::memcpy(reinterpret_cast<void*>(listM2.recipient), reinterpret_cast<const void*>(buffer.data() + position), sizeof(listM2.recipient));
 
-        return listm2;
+        return listM2;
     }
-    
+
+    void print_formatted_date(std::time_t timestamp) {
+        std::tm* timeinfo = std::localtime(&timestamp);
+        if (timeinfo != nullptr) {
+            char buffer[20];
+            std::strftime(buffer, sizeof(buffer), "%d:%m:%Y %H:%M", timeinfo);
+            std::cout << buffer << std::endl;
+        }
+    }
 
     void print() {
-        std::cout << "--------- LIST M2 MESSAGE -----------" << std::endl;
-        std::cout << "COUNTER: " <<  this->counter << "  -----------" << std::endl;
-        std::cout << "TIMESTAMP: " <<  this->timestamp << "  -----------" << std::endl;
-        std::cout << "AMOUNT" <<  this->amount << "  -----------" << std::endl;
-        std::cout << "RECIPIENT" <<  this->recipient << "  -----------" << std::endl;
-        std::cout << "--------- END LIST M2 MESSAGE -----------" << std::endl;
-    
+        std::cout << "PAYEE: "   << this->recipient << ",\t"
+                  << "AMOUT: " << this->amount    << ",\t"
+                  << "DATE: ";
+        print_formatted_date(this->timestamp);
     }
 
 };

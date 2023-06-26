@@ -38,18 +38,10 @@ bool FileManager::FindUser(std::string path)
     serialized_salt.assign(serialized_salt.size(), 0);
     file.read(reinterpret_cast<char*>(serialized_salt.data()), serialized_salt.size());
     to_read -= serialized_salt.size();
-
-    #ifdef DEBUG
-    std::cout << "FileManager::FindUser() >> SERIALIZED SALT: "<< serialized_salt.data() << std::endl;
-    #endif
     
     password_digest.assign(password_digest.size(), 0);
     file.read(reinterpret_cast<char*>(password_digest.data()), password_digest.size());
     to_read -= password_digest.size();
-
-    #ifdef DEBUG
-    std::cout << "FileManager::FindUser() >> DIGEST PASSWORD + SALT: "<< password_digest.data() << std::endl;
-    #endif
 
     // decifra amount
     std::vector<uint8_t> ciphertext(32, 0);
@@ -93,52 +85,47 @@ int FileManager::GetAmount() {
 
 bool FileManager::SetAmount(int new_amount) 
 {
-    std::ofstream file1(this->file_path, std::ios::binary);
+    std::ofstream file(this->file_path, std::ios::binary);
     
-    if (!file1) {
-        std::cout << "non riesco a scrivere" << std::endl;
+    if (!file) {
+        std::cerr << "\033[1;31m[ERROR]\033[0m FileManager::SetAmount() >> Failed to open file." << std::endl;
         return false;
     }
 
     // scrivi username
-    file1.write(reinterpret_cast<const char*>(this->username.data()), username.size());
+    file.write(reinterpret_cast<const char*>(this->username.data()), username.size());
+    
     //scrivi salt
-    file1.write(reinterpret_cast<const char*>(this->serialized_salt.data()), serialized_salt.size());
+    file.write(reinterpret_cast<const char*>(this->serialized_salt.data()), serialized_salt.size());
 
-    std::vector<uint8_t> vec0;
+    std::vector<uint8_t> vec0(50, 0);
     std::string salted_password = GetUsername() + GetSalt();
-    std::cout << "PASSWORD + SALT " << salted_password << std::endl;
-    vec0.resize(50);
-    vec0.assign(vec0.size(), 0);
     stringToVector(salted_password, vec0, 50);
 
     std::vector<uint8_t> digest;
     unsigned int digest_size;
     SHA_512::generate(reinterpret_cast<unsigned char*>(vec0.data()), vec0.size(), digest, digest_size);
-    file1.write(reinterpret_cast<const char*>(digest.data()), digest_size );
+    file.write(reinterpret_cast<const char*>(digest.data()), digest_size );
 
-    std::vector<uint8_t> cleartext;
-    cleartext.resize(20);
-    cleartext.assign(cleartext.size(), 0);
+    std::vector<uint8_t> cleartext(20, 0);
     std::string amountstr = std::to_string(new_amount);
     stringToVector(amountstr, cleartext, 20);
 
 
     std::vector<uint8_t> ciphertext;
-    std::vector<uint8_t> session_key;
+    std::vector<uint8_t> session_key(256, 2);
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
-    session_key.resize(256);
-    session_key.assign(session_key.size(), 2);
 
     try {
         AES_CBC encryptor(ENCRYPT, session_key, true);
         encryptor.run(cleartext , ciphertext, iv);
     } catch (std::runtime_error& ex) {
         std::cerr << ex.what() << std::endl;
+        file.close();
         return false;
     }
 
-    file1.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
-    file1.close();
+    file.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
+    file.close();
     return true;
 }

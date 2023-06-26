@@ -175,8 +175,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     std::string account_file_path = "../res/archive/account/" + dest_usr + ".txt";
     
     FileManager dest_user_file;
-    if (!dest_user_file.FindUser(account_file_path)) 
-    {
+    if (!dest_user_file.FindUser(account_file_path)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): payee not exists: " << dest_usr << "." << std::endl;
         SendTransferResponse(false);
@@ -188,8 +187,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
 
     FileManager src_user_file;
     std::string path(reinterpret_cast<const char*>(buffer), sizeof(buffer));
-    if (!src_user_file.FindUser(path))
-    {
+    if (!src_user_file.FindUser(path)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not load payer (" << this->username.c_str() << ") informations."<< std::endl;
         SendTransferResponse(false);
@@ -197,8 +195,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     }
 
     int src_amount = src_user_file.GetAmount();
-    if (src_amount < msg_amount) 
-    {
+    if (src_amount < msg_amount) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): payer (" << this->username.c_str() << ") does not have enough money."<< std::endl;
         SendTransferResponse(false);
@@ -208,16 +205,14 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     int new_src_amount = src_amount - msg_amount;
     int new_dest_amount = dest_user_file.GetAmount() + msg_amount;
 
-    if (!src_user_file.SetAmount(new_src_amount)) 
-    {
+    if (!src_user_file.SetAmount(new_src_amount)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not update payer's (" << this->username.c_str() << ") balance."<< std::endl;
         SendTransferResponse(false);
         return;
     }
 
-    if (!dest_user_file.SetAmount(new_dest_amount)) 
-    {
+    if (!dest_user_file.SetAmount(new_dest_amount)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not update payee's (" << dest_usr << ") balance." << std::endl;
         SendTransferResponse(false);
@@ -247,10 +242,10 @@ void Worker::ListHandler()
     if (transaction_num >= this->max_list_transfers)
         transaction_num = this->max_list_transfers;
 
-    ListM1 listm1(this->counter, transaction_num);
+    ListM1 listM1(this->counter, transaction_num);
 
-    std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE);
-    listm1.serialize(plaintext.data());
+    std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE, 0);
+    listM1.serialize(plaintext);
 
     SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
     std::vector<uint8_t> to_send = encrypted_response.serialize();
@@ -268,31 +263,33 @@ void Worker::ListHandler()
         std::stringstream ss(row_to_deserialize);
         std::string field;
 
-        ListM2 listm2;
+        ListM2 listM2;
 
         // DESERIALIZZA LA STRINGA 
 
         std::getline(ss, field, ':');
-        std::memcpy(listm2.recipient, field.c_str(), sizeof(listm2.recipient));
+        std::memcpy(listM2.recipient, field.c_str(), sizeof(listM2.recipient));
 
         std::getline(ss, field, ':');
-        listm2.amount = std::stol(field); 
+        listM2.amount = std::stol(field); 
 
         std::getline(ss, field, ':');
-        listm2.timestamp = std::stoll(field);
+        listM2.timestamp = std::stoll(field);
 
-        listm2.counter = counter;
+        listM2.counter = counter;
 
-        std::cout << "Worker(): " << std::endl;
-        listm2.print();
+        #ifdef DEBUG
+        std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
+        listM2.print();
+        #endif // DEBUG
+
         // SPEDISCI
-        std::vector<uint8_t> plaintext(LIST_RESPONSE_2_SIZE);
-        listm2.serialize(plaintext.data());
+        std::vector<uint8_t> plaintext;
+        listM2.serialize(plaintext);
 
         SessionMessage encrypted_response(this->session_key, this->hmac_key, plaintext);
         std::vector<uint8_t> to_send = encrypted_response.serialize();
         Send(to_send);
-
     }
 }
 
@@ -311,8 +308,10 @@ void Worker::Handshake()
     // Deserialize M1
     HandshakeM1 m1 = HandshakeM1::Deserialize(serialized_m1);
 
-    if (!ClientExists(m1.username, m1.username_size))
+    if (!ClientExists(m1.username, m1.username_size)) {
+        
         return;
+    }
     
     DiffieHellman* dh = nullptr;
     EVP_PKEY* ephemeral_key = nullptr;
@@ -369,7 +368,7 @@ void Worker::Handshake()
 
         std::memset(reinterpret_cast<void*>(shared_secret.data()), 0, shared_secret.size());
         shared_secret.clear();
-    } catch(...) {
+    } catch(const std::runtime_error& ex) {
         std::memset(reinterpret_cast<void*>(keys.data()), 0, keys.size());
         keys.clear();
 
@@ -377,7 +376,7 @@ void Worker::Handshake()
         shared_secret.clear();
         
         EVP_PKEY_free(ephemeral_key);
-        throw;
+        throw ex;
     }
 
     std::memcpy(this->session_key.data(), keys.data(), (keys.size()/2) * sizeof(uint8_t));
@@ -389,13 +388,13 @@ void Worker::Handshake()
     std::vector<uint8_t> serialized_ephemeral_key;
     try {
         serialized_ephemeral_key = DiffieHellman::serializeKey(ephemeral_key);
-    } catch(...) {
+    } catch(const std::runtime_error& ex) {
         EVP_PKEY_free(ephemeral_key);
 
         std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
         serialized_ephemeral_key.clear();
 
-        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed to serialize ephemeral key.");
+        throw ex;
     }
     EVP_PKEY_free(ephemeral_key);
 
@@ -446,7 +445,7 @@ void Worker::Handshake()
 
         std::memset(reinterpret_cast<void*>(signature.data()), 0, signature.size());
         signature.clear();
-    } catch(...) {
+    } catch(const std::runtime_error& ex) {
         if (encryptor != nullptr)
             delete encryptor;
 
@@ -465,7 +464,7 @@ void Worker::Handshake()
         std::memset(reinterpret_cast<void*>(serialized_ephemeral_key.data()), 0, serialized_ephemeral_key.size());
         serialized_ephemeral_key.clear();
 
-        throw;
+        throw ex;
     }
 
     try {
