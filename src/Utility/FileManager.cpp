@@ -45,9 +45,9 @@ bool FileManager::FindUser(std::string path)
 
     // decifra amount
     std::vector<uint8_t> ciphertext(32, 0);
-    std::vector<uint8_t> session_key(256);
-    std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
+    std::vector<uint8_t> session_key(32);
     session_key.assign(session_key.size(), 2);
+    std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
     file.read(reinterpret_cast<char*>(ciphertext.data()), ciphertext.size());
     file.close();
 
@@ -55,8 +55,8 @@ bool FileManager::FindUser(std::string path)
     try {
         AES_CBC decryptor(DECRYPT, session_key, true);
         decryptor.run(ciphertext, serialized_amount, iv);
-    } catch(std::runtime_error& error) {
-        std::cerr << error.what() << std::endl;
+    } catch(const std::runtime_error& ex) {
+        std::cerr << ex.what() << std::endl;
         return false;
     }
     return true;
@@ -95,25 +95,18 @@ bool FileManager::SetAmount(int new_amount)
     // scrivi username
     file.write(reinterpret_cast<const char*>(this->username.data()), username.size());
     
-    //scrivi salt
+    // scrivi salt
     file.write(reinterpret_cast<const char*>(this->serialized_salt.data()), serialized_salt.size());
 
-    std::vector<uint8_t> vec0(50, 0);
-    std::string salted_password = GetUsername() + GetSalt();
-    stringToVector(salted_password, vec0, 50);
-
-    std::vector<uint8_t> digest;
-    unsigned int digest_size;
-    SHA_512::generate(reinterpret_cast<unsigned char*>(vec0.data()), vec0.size(), digest, digest_size);
-    file.write(reinterpret_cast<const char*>(digest.data()), digest_size );
+    // scrivi h(password + salt)
+    file.write(reinterpret_cast<const char*>(this->password_digest.data()), this->password_digest.size());
 
     std::vector<uint8_t> cleartext(20, 0);
     std::string amountstr = std::to_string(new_amount);
     stringToVector(amountstr, cleartext, 20);
 
-
     std::vector<uint8_t> ciphertext;
-    std::vector<uint8_t> session_key(256, 2);
+    std::vector<uint8_t> session_key(32, 2);
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
 
     try {
@@ -128,4 +121,31 @@ bool FileManager::SetAmount(int new_amount)
     file.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
     file.close();
     return true;
+}
+
+bool FileManager::CheckPasswordValidity(std::string password) {
+
+    // apri il file
+    std::ifstream file(this->file_path, std::ios::binary);
+
+    if(!file) {
+         std::cerr << "\033[1;31m[ERROR]\033[0m FileManager::CheckPasswordValidity() >> Failed to open file." << std::endl;
+        return false;
+    }
+
+    size_t length1 = password.find_first_of('\n');
+    std::string salted_password = password.substr(0, length1) + GetSalt();
+
+    std::vector<uint8_t> vec0(50, 0);
+    stringToVector(salted_password, vec0, 50);
+
+    file.seekg(USERNAME_DIM + SERIALIZED_SALT_DIM, std::ios::beg);
+    int digest_size = 64;
+    std::vector<uint8_t> digest(64);
+    digest.assign(digest.size(), 0);
+    file.read(reinterpret_cast<char*>(digest.data()), digest.size());
+
+    bool result =  SHA_512::verify(reinterpret_cast<unsigned char*>(vec0.data()), vec0.size(), digest.data());
+
+    return result;
 }

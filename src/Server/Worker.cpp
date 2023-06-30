@@ -12,22 +12,26 @@ Worker::Worker(jobs_t* jobs) : max_list_transfers(4)
 
 Worker::~Worker()
 {
+    std::memset(reinterpret_cast<void*>(iv.data()), 0, iv.size());
     iv.clear();
+    
     username.clear();
+
+    std::memset(reinterpret_cast<void*>(hmac_key.data()), 0, hmac_key.size());
     hmac_key.clear();
+    
+    std::memset(reinterpret_cast<void*>(session_key.data()), 0, session_key.size());
     session_key.clear();
 }
 
 void Worker::Run() 
 {
-    while (true) 
-    {
+    while (true) {
         {
             std::unique_lock<std::mutex> lock(jobs->socket_mutex);
             jobs->socket_cv.wait(lock, [&]() { return !jobs->socket_queue.empty() || jobs->stop; });
 
-            if (jobs->stop) 
-            {
+            if (jobs->stop) {
                 #ifdef DEBUG
                 std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> stop" << std::endl;
                 #endif
@@ -50,13 +54,7 @@ void Worker::Run()
             while(true) {
                 ClientReq request = RequestHandler();
 
-                #ifdef DEBUG
-                std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
-                std::cout << "Client " << client_socket << " -> " 
-                        << request.request_code << ":" 
-                        << request.recipient << ":" 
-                        << request.amount << std::endl;
-                #endif 
+                CheckCounter(request.counter);
 
                 switch(request.request_code) 
                 {
@@ -98,7 +96,11 @@ ClientReq Worker::RequestHandler()
 {
     std::vector<uint8_t> buffer(SessionMessage::get_size(REQUEST_PACKET_SIZE));
 
-    Receive(buffer, SessionMessage::get_size(REQUEST_PACKET_SIZE));
+    try {
+        Receive(buffer, SessionMessage::get_size(REQUEST_PACKET_SIZE));
+    } catch(const std::runtime_error& ex) {
+        throw ex;
+    }
 
     SessionMessage encrypted_request = SessionMessage::deserialize(buffer, REQUEST_PACKET_SIZE);
     
@@ -147,6 +149,7 @@ void Worker::BalanceHandler()
               << " | amount: " << amount << std::endl;
     #endif 
 
+    IncrementCounter(); 
     BalanceResponse balance_resp(this->counter, amount);
 
     std::vector<uint8_t> plaintext(BALANCE_RESPONSE_SIZE, 0);
@@ -178,7 +181,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     if (!dest_user_file.FindUser(account_file_path)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): payee not exists: " << dest_usr << "." << std::endl;
-        SendTransferResponse(false);
+        SendResponse(false);
         return;
     }
 
@@ -190,7 +193,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     if (!src_user_file.FindUser(path)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not load payer (" << this->username.c_str() << ") informations."<< std::endl;
-        SendTransferResponse(false);
+        SendResponse(false);
         return;
     }
 
@@ -198,7 +201,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     if (src_amount < msg_amount) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): payer (" << this->username.c_str() << ") does not have enough money."<< std::endl;
-        SendTransferResponse(false);
+        SendResponse(false);
         return;
     }
 
@@ -208,14 +211,14 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     if (!src_user_file.SetAmount(new_src_amount)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not update payer's (" << this->username.c_str() << ") balance."<< std::endl;
-        SendTransferResponse(false);
+        SendResponse(false);
         return;
     }
 
     if (!dest_user_file.SetAmount(new_dest_amount)) {
         std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
                   << "TransferHandler(): Could not update payee's (" << dest_usr << ") balance." << std::endl;
-        SendTransferResponse(false);
+        SendResponse(false);
         return;
     }
 
@@ -223,7 +226,7 @@ void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
     TransferManager transfer;
     transfer.writeTransfer(transfer_file_path, msg_amount, dest_usr);
 
-    SendTransferResponse(true);
+    SendResponse(true);
 }
 
 
@@ -242,6 +245,7 @@ void Worker::ListHandler()
     if (transaction_num >= this->max_list_transfers)
         transaction_num = this->max_list_transfers;
 
+    IncrementCounter();
     ListM1 listM1(this->counter, transaction_num);
 
     std::vector<uint8_t> plaintext(LIST_RESPONSE_1_SIZE, 0);
@@ -276,6 +280,7 @@ void Worker::ListHandler()
         std::getline(ss, field, ':');
         listM2.timestamp = std::stoll(field);
 
+        IncrementCounter();
         listM2.counter = counter;
 
         #ifdef DEBUG
@@ -308,10 +313,8 @@ void Worker::Handshake()
     // Deserialize M1
     HandshakeM1 m1 = HandshakeM1::Deserialize(serialized_m1);
 
-    if (!ClientExists(m1.username, m1.username_size)) {
-        
+    if (!ClientExists(m1.username, m1.username_size))
         return;
-    }
     
     DiffieHellman* dh = nullptr;
     EVP_PKEY* ephemeral_key = nullptr;
@@ -562,8 +565,56 @@ void Worker::Handshake()
     if (!signature_verification)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed Client authentication.");
 
-    // reset the counter
-    counter = 0;
+    std::vector<uint8_t> buffer(SessionMessage::get_size(PWD_MESSAGE1_SIZE));
+
+    try {
+        Receive(buffer, SessionMessage::get_size(PWD_MESSAGE1_SIZE));
+    } catch (const std::runtime_error& ex) {
+        throw ex;
+    }
+
+    SessionMessage encrypted_request = SessionMessage::deserialize(buffer, PWD_MESSAGE1_SIZE);
+    std::memset(reinterpret_cast<void*>(buffer.data()), 0, buffer.size());
+    buffer.clear();
+
+    // Decrypt the encrypted request
+    std::vector<uint8_t> plaintext(PWD_MESSAGE1_SIZE);
+    encrypted_request.decrypt(this->session_key, plaintext);
+
+    // Deserialize the decrypted password message
+    PasswordMessage passwordMessage = PasswordMessage::deserialize(plaintext);
+
+    // Reset the counter
+    counter = 1;
+
+    // Check the counter value
+    CheckCounter(passwordMessage.counter);
+
+    // Convert the password from uint8_t array to string
+    std::string password(passwordMessage.password, passwordMessage.password + 30);
+
+    // Create file path for user's account
+    char file_path[sizeof("../res/archive/account/") + this->username.length() + sizeof(".txt") + 1];
+    std::sprintf(file_path, "../res/archive/account/%s.txt", this->username.c_str());
+
+    // Create a FileManager instance and find the user
+    FileManager* manager = new FileManager();
+    manager->FindUser(file_path);
+
+    // Check the validity of the password using FileManager
+    bool outcome = manager->CheckPasswordValidity(password);
+    delete manager;
+
+    try {
+        // Send the outcome of password checking
+        SendResponse(outcome);
+    } catch (const std::runtime_error& ex) {
+        throw ex;
+    }
+
+    // If the password was incorrect, return
+    if (!outcome) throw std::runtime_error("\033[1;31m[ERROR]\033[0m Handshake() >> Failed password check.");
+
 }
 
 ssize_t Worker::Receive(std::vector<uint8_t>& buffer, ssize_t buffer_size) {
@@ -657,16 +708,17 @@ bool Worker::ClientExists(uint8_t* username, ssize_t username_size)
     return true;
 }
 
-void Worker::SendTransferResponse(bool outcome) {
+void Worker::SendResponse(bool outcome) {
 
     // Transfer response = S - Success, D - Denied
     std::string transfer_outcome = (outcome) ? "S" : "D";
 
+    IncrementCounter();
     TransferResponse transfer_response(reinterpret_cast<char>(transfer_outcome[0]), this->counter);
 
     #ifdef DEBUG
     std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-              << "TransferHandler() >> outcome: " << transfer_response.outcome  << std::endl;
+              << "SendResponse(): outcome = " << transfer_response.outcome  << std::endl;
     #endif
 
     std::vector<uint8_t> plaintext(TRANSFER_RESPONSE_SIZE, 0);
@@ -679,4 +731,20 @@ void Worker::SendTransferResponse(bool outcome) {
     } catch(const std::runtime_error& ex) {
         throw ex;
     }
+}
+
+void Worker::IncrementCounter() {
+    if (this->counter + 1 == 0) {
+        std::string message = BLUE_BOLD + std::string("[WORKER]") + RESET + " >> " + "IncrementCounter(): wrap around! Session clear required.";
+        throw std::runtime_error(message);
+    }
+
+    this->counter++;
+}
+
+void Worker::CheckCounter(uint32_t received_counter) {
+    if (this->counter + 1 != received_counter) {
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m CheckCounter(): Replay attack detected!");
+    }
+    this->counter = received_counter;
 }

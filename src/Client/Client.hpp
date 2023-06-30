@@ -13,10 +13,11 @@
 
 #include "../Packet/List.hpp"
 #include "../Packet/Balance.hpp"
+#include "../Packet/Transfer.hpp"
 #include "../Packet/ClientReq.hpp"
 #include "../Packet/Handshake.hpp"
-#include "../Packet/Transfer.hpp"
 #include "../Packet/SessionMessage.hpp"
+#include "../Packet/PasswordMessage.hpp"
 
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
@@ -32,6 +33,7 @@ public:
     void recv_from_server(std::vector<uint8_t>& buffer);
     
     void handshake();
+    void SendPassword(std::string password);
 
     void balance();
     void transfer();
@@ -41,13 +43,14 @@ private:
     int sock_fd;
     struct sockaddr_in server_address;
 
-    uint32_t m_counter; 
+    uint32_t counter; 
     std::vector<uint8_t> hmac_key;
     std::vector<uint8_t> session_key;
-    EVP_PKEY* m_long_term_key;
 
     std::string m_username;
 
-    void turnOffEcho();
     void turnOnEcho();
+    void turnOffEcho();
+    void CheckCounter(uint32_t received_counter);
+    void IncrementCounter();
 };

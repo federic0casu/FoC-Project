@@ -24,7 +24,7 @@ bool TransferManager::writeTransfer(std::string file_path, int amount_to_write, 
     // cifra il cleartext
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
     std::vector<uint8_t> ciphertext;
-    std::vector<uint8_t> session_key(256, 2);
+    std::vector<uint8_t> session_key(32, 2);
 
     try {
         AES_CBC encryptor(ENCRYPT, session_key, true);
@@ -44,7 +44,7 @@ bool TransferManager::writeTransfer(std::string file_path, int amount_to_write, 
 
 
 // da modificare, deve prendere un buffer a file, decifrare 96 byte dal file e ritornare la stringa decifrata
-bool TransferManager:: readTransfer(std::string file_path) {
+bool TransferManager::readTransfer(std::string file_path) {
 
     std::ifstream file(file_path);
     if (!file){
@@ -57,7 +57,7 @@ bool TransferManager:: readTransfer(std::string file_path) {
     
     // dopo aver letto una transfer cifrata, decifrala
     std::vector<uint8_t> cleartext;
-    std::vector<uint8_t> session_key(256, 2);
+    std::vector<uint8_t> session_key(32, 2);
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc())); 
 
     try {
@@ -105,7 +105,7 @@ std::string TransferManager::readNextTransfer(int row_pos, std::string file_path
     
     // dopo aver letto una transfer cifrata, decifrala
     std::vector<uint8_t> cleartext;
-    std::vector<uint8_t> session_key(256, 2);
+    std::vector<uint8_t> session_key(32, 2);
     std::vector<uint8_t> iv(EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
 
     try {

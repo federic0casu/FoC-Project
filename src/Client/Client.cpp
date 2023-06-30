@@ -2,8 +2,6 @@
 
 Client::Client(const std::string &server_ip, int server_port)
 {
-    m_long_term_key = nullptr;
-
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sock_fd == -1)
@@ -41,7 +39,8 @@ void Client::balance()
 {
     try {
         const char padding[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
-        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding);
+        IncrementCounter();
+        ClientReq balance_request(CODE_BALANCE_REQUEST, 0, padding, this->counter);
 
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         balance_request.serialize(plaintext);
@@ -67,6 +66,7 @@ void Client::balance()
         encrypted_response.decrypt(this->session_key, plaintext);
 
         BalanceResponse response = BalanceResponse::deserialize(plaintext);
+        CheckCounter(response.counter);
         response.print();
     } catch (const std::runtime_error &ex) {
         #ifdef DEBUG
@@ -88,12 +88,13 @@ void Client::transfer()
         std::cout << ">> Insert amount [$]: ";
         std::cin >> amount;
 
-        ClientReq transfer_request(CODE_TRANSFER_REQUEST, amount, dest.c_str());
+        IncrementCounter();
+        ClientReq transfer_request(CODE_TRANSFER_REQUEST, amount, dest.c_str(), this->counter);
 
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         transfer_request.serialize(plaintext);
 
-        SessionMessage encrypted_request(session_key, hmac_key, plaintext);
+        SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
 
         std::vector<uint8_t> to_send = encrypted_request.serialize();
         send_to_server(to_send);
@@ -110,6 +111,7 @@ void Client::transfer()
         encrypted_response.decrypt(this->session_key, plaintext);
 
         TransferResponse response = TransferResponse::deserialize(plaintext.data());
+        CheckCounter(response.counter);
         response.print();
     } catch (const std::runtime_error &ex) {
         #ifdef DEBUG
@@ -124,7 +126,8 @@ void Client::list()
 {
     try {
         const char padding[] = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
-        ClientReq list_request(CODE_LIST_REQUEST, 0, padding);
+        IncrementCounter();
+        ClientReq list_request(CODE_LIST_REQUEST, 0, padding, this->counter);
 
         std::vector<uint8_t> plaintext(REQUEST_PACKET_SIZE);
         list_request.serialize(plaintext);
@@ -148,6 +151,7 @@ void Client::list()
         encrypted_response.decrypt(this->session_key, plaintext);
 
         ListM1 listm1 = ListM1::deserialize(plaintext);
+        CheckCounter(listm1.counter);
 
         // ---------------- RICEVI LE TRANSAZIONI ---------------------
 
@@ -163,6 +167,7 @@ void Client::list()
             encrypted_response.decrypt(this->session_key, plaintext);
 
             ListM2 listm2 = ListM2::deserialize(plaintext);
+            CheckCounter(listm2.counter);
             listm2.print();
         }
     } catch(const std::runtime_error& ex) {
@@ -484,7 +489,27 @@ void Client::handshake()
     }
 
     // reset the counter
-    m_counter = 0;
+    counter = 1;
+
+    SendPassword(password);
+
+    std::vector<uint8_t> buffer(SessionMessage::get_size(PWD_RESPONSE_SIZE));
+    std::vector<uint8_t> plaintext;
+    recv_from_server(buffer);
+
+    SessionMessage encrypted_response = SessionMessage::deserialize(buffer, PWD_RESPONSE_SIZE);
+
+    plaintext.resize(PWD_RESPONSE_SIZE);
+    plaintext.assign(plaintext.size(), 0);
+    encrypted_response.decrypt(this->session_key, plaintext);
+
+    TransferResponse response = TransferResponse::deserialize(plaintext.data());
+    CheckCounter(response.counter);
+
+    const char* denied = "D";
+    
+    if (response.outcome == (uint8_t)*denied)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Please, try to attempt the login procedure again...");
 
     std::cout << "Session established." << std::endl;
 }
@@ -552,4 +577,45 @@ void Client::turnOnEcho() {
     term.c_lflag |= ECHO;
     tcsetattr(STDIN_FILENO, TCSANOW, &term);
     std::cout << std::endl;
+}
+
+void Client::SendPassword(std::string password) {
+    IncrementCounter();
+    
+    PasswordMessage passwordMessage(password.c_str(), this->counter);
+    
+    std::vector<uint8_t> plaintext(PWD_MESSAGE1_SIZE);
+    passwordMessage.serialize(plaintext);
+    
+    SessionMessage encrypted_request(this->session_key, this->hmac_key, plaintext);
+
+    std::memset(reinterpret_cast<void *>(plaintext.data()), 0, plaintext.size());
+    plaintext.clear();
+
+    std::vector<uint8_t> to_send = encrypted_request.serialize();
+    try {
+        send_to_server(to_send);
+        std::memset(reinterpret_cast<void *>(to_send.data()), 0, to_send.size());
+        to_send.clear();
+    } catch (const std::runtime_error& ex) {
+        std::memset(reinterpret_cast<void *>(to_send.data()), 0, to_send.size());
+        to_send.clear();
+        throw ex;
+    }
+} 
+
+void Client::CheckCounter(uint32_t received_counter) {
+    if (this->counter + 1 != received_counter) {
+        std::cout << "CheckCounter(): Replay attack detected!" << std::endl;
+        close(sock_fd);
+        return;
+    }
+    this->counter = received_counter;
+}   
+
+void Client::IncrementCounter() {
+    if (this->counter + 1 == 0)
+        throw std::runtime_error("\033[1;31m[ERROR]\033[0m Please, try to attempt the login procedure again...");
+
+    this->counter++;
 }

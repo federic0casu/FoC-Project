@@ -19,23 +19,21 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#include "../Crypto/DiffieHellman.hpp"
-
 #include "../Packet/List.hpp"
 #include "../Packet/Balance.hpp"
 #include "../Packet/Transfer.hpp"
 #include "../Packet/Handshake.hpp"
 #include "../Packet/ClientReq.hpp"
 #include "../Packet/SessionMessage.hpp"
+#include "../Packet/PasswordMessage.hpp"
 
 #include "../Generic/Codes.hpp"
 #include "../Generic/Utility.hpp"
 #include "../Utility/FileManager.hpp"
 #include "../Utility/TransferManager.hpp"
 
+#include "../Crypto/DiffieHellman.hpp"
 
-
-#define SESSION_KEY_LENGHT 256
 
 struct jobs {
     std::vector<int> socket_queue;
@@ -81,5 +79,7 @@ private:
     void BalanceHandler();
 
     // Utility
-    void SendTransferResponse(bool outcome);
+    void IncrementCounter();
+    void CheckCounter(uint32_t received_counter);
+    void SendResponse(bool outcome);
 };

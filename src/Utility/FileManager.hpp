@@ -1,4 +1,3 @@
-#include <mutex>
 #include <string>
 #include <atomic>
 #include <thread>
@@ -50,4 +49,5 @@ class FileManager {
     std::string GetSalt();
     int GetAmount();
     bool SetAmount(int new_amount);
+    bool CheckPasswordValidity(std::string password);
 };

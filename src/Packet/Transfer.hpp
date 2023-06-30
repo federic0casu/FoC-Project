@@ -13,8 +13,7 @@ struct TransferResponse {
 
     TransferResponse() {}
 
-    TransferResponse(char resp, uint32_t counter) {
-        this->counter = counter;
+    TransferResponse(char resp, uint32_t __counter) : counter(__counter){
         this->outcome = resp;
     }
 

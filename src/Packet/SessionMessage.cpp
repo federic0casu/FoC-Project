@@ -131,12 +131,10 @@ SessionMessage SessionMessage::deserialize(const std::vector<uint8_t>& buffer, c
     size_t position = 0;
 
     std::copy(buffer.begin(), buffer.begin() + (EVP_CIPHER_iv_length(EVP_aes_256_cbc()) * sizeof(uint8_t)), sessionMessage.iv.begin());
-    position += EVP_CIPHER_iv_length(EVP_aes_256_cbc()) * sizeof(uint8_t);
+    position += EVP_CIPHER_iv_length(EVP_aes_256_cbc());
 
     std::copy(buffer.begin() + position, buffer.begin() + position + (sessionMessage.ciphertext.size() * sizeof(uint8_t)), sessionMessage.ciphertext.begin());
-    position += sessionMessage.ciphertext.size() * sizeof(uint8_t);
-
-    //SessionMessage::remove_garbage(sessionMessage.ciphertext, EVP_CIPHER_block_size(EVP_aes_256_cbc()));
+    position += sessionMessage.ciphertext.size();
 
     std::memcpy(sessionMessage.hmac.data(), buffer.data() + position, HMAC_DIGEST_SIZE * sizeof(uint8_t));
 
