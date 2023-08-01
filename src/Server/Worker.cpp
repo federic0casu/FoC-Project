@@ -33,7 +33,7 @@ void Worker::Run()
 
             if (jobs->stop) {
                 #ifdef DEBUG
-                std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> stop" << std::endl;
+                std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "] >> stop" << std::endl;
                 #endif
                 return;
             }
@@ -43,7 +43,7 @@ void Worker::Run()
         }
 
         #ifdef DEBUG
-        std::cout << BLUE_BOLD << "[WORKER]" << RESET 
+        std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "]" 
                   << " >> Client connected (socket: "
                   << client_socket << ")." << std::endl;
         #endif
@@ -76,8 +76,8 @@ void Worker::Run()
                 std::memset(reinterpret_cast<void*>(&request), 0, sizeof(ClientReq));
             }
         } catch(std::runtime_error& ex) {
-            std::cerr << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-                      << ex.what() << std::endl;
+            std::cerr << "[" << BLUE_BOLD << "WORKER" << RESET << "]"
+                      << " >> " << ex.what() << std::endl;
             
             close(client_socket);
 
@@ -108,7 +108,7 @@ ClientReq Worker::RequestHandler()
     buffer.clear();
 
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
+    std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "] >> "
               << "Incoming encrypted message..." << std::endl;
     encrypted_request.print();
     #endif 
@@ -144,7 +144,7 @@ void Worker::BalanceHandler()
     }
 
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "[WORKER]" << RESET 
+    std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "]" 
               << " >> Balance(): user: " << this->username.c_str()
               << " | amount: " << amount << std::endl;
     #endif 
@@ -169,8 +169,8 @@ void Worker::BalanceHandler()
 void Worker::TransferHandler(uint8_t* recipient, uint32_t msg_amount)
 {    
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-              << "TransferHandler(): payee is: " << recipient << "." << std::endl;
+    std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "]"
+              << " >> TransferHandler(): payee is: " << recipient << "." << std::endl;
     #endif
 
     // Check if destination user exists
@@ -284,7 +284,7 @@ void Worker::ListHandler()
         listM2.counter = counter;
 
         #ifdef DEBUG
-        std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> ";
+        std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "] >> ";
         listM2.print();
         #endif // DEBUG
 
@@ -717,8 +717,8 @@ void Worker::SendResponse(bool outcome) {
     TransferResponse transfer_response(reinterpret_cast<char>(transfer_outcome[0]), this->counter);
 
     #ifdef DEBUG
-    std::cout << BLUE_BOLD << "[WORKER]" << RESET << " >> "
-              << "SendResponse(): outcome = " << transfer_response.outcome  << std::endl;
+    std::cout << "[" << BLUE_BOLD << "WORKER" << RESET << "]"
+              << " >> SendResponse(): outcome = " << transfer_response.outcome  << std::endl;
     #endif
 
     std::vector<uint8_t> plaintext(TRANSFER_RESPONSE_SIZE, 0);
@@ -735,7 +735,7 @@ void Worker::SendResponse(bool outcome) {
 
 void Worker::IncrementCounter() {
     if (this->counter + 1 == 0) {
-        std::string message = BLUE_BOLD + std::string("[WORKER]") + RESET + " >> " + "IncrementCounter(): wrap around! Session clear required.";
+        std::string message = std::string("[") + BLUE_BOLD + std::string("WORKER") + RESET + "] >> " + "IncrementCounter(): wrap around! Session clear required.";
         throw std::runtime_error(message);
     }
 

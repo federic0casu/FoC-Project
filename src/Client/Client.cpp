@@ -1,5 +1,8 @@
 #include "Client.hpp"
 
+#define REQUEST(message)  std::cout << " [" << BLUE_BOLD << "REQUEST" << RESET <<  "] " << message << std::endl;
+#define RESPONSE(message) std::cout << " [" << BLUE_BOLD << "RESPONSE" << RESET << "] " << message;
+
 Client::Client(const std::string &server_ip, int server_port)
 {
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -32,11 +35,15 @@ void Client::connect_to_server()
     if (connect(sock_fd, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Failed to connect to the server!");
 
-    std::cout << "Connected to the server." << std::endl;
+    std::cout << "=================================================" << std::endl;
+    std::cout << " [" << BLUE_BOLD << "INFO" << RESET << "] Connected to the server." << std::endl;
+    std::cout << "=================================================" << std::endl;
 }
 
 void Client::balance() 
 {
+    std::cout << "=================================================" << std::endl;
+    REQUEST("Balance()")
     try {
         const char padding[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
         IncrementCounter();
@@ -67,25 +74,29 @@ void Client::balance()
 
         BalanceResponse response = BalanceResponse::deserialize(plaintext);
         CheckCounter(response.counter);
+        RESPONSE("")
         response.print();
     } catch (const std::runtime_error &ex) {
         #ifdef DEBUG
         std::cerr << ex.what() << std::endl;
         #endif // DEBUG
 
-        std::cerr << "Something went wrong. Please try again..." << std::endl;
+        std::cerr << "  Something went wrong. Please try again..." << std::endl;
     }
+     std::cout << "=================================================" << std::endl;
 }
 
 void Client::transfer()
 {
+    std::cout << "=================================================" << std::endl;
+    REQUEST("Transfer()")
     try {
         std::string dest;
         uint32_t amount;
 
-        std::cout << ">> Insert payee: ";
+        std::cout << "  >> Insert payee: ";
         std::cin >> dest;
-        std::cout << ">> Insert amount [$]: ";
+        std::cout << "  >> Insert amount [$]: ";
         std::cin >> amount;
 
         IncrementCounter();
@@ -112,18 +123,22 @@ void Client::transfer()
 
         TransferResponse response = TransferResponse::deserialize(plaintext.data());
         CheckCounter(response.counter);
+        RESPONSE("")
         response.print();
     } catch (const std::runtime_error &ex) {
         #ifdef DEBUG
         std::cerr << ex.what() << std::endl;
         #endif // DEBUG
 
-        std::cerr << "Something went wrong. Please try again..." << std::endl;
+        std::cerr << "  Something went wrong. Please try again..." << std::endl;
     }
+    std::cout << "=================================================" << std::endl;
 }
 
 void Client::list()
 {
+    std::cout << "=================================================" << std::endl;
+    REQUEST("List()")
     try {
         const char padding[] = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL";
         IncrementCounter();
@@ -168,6 +183,7 @@ void Client::list()
 
             ListM2 listm2 = ListM2::deserialize(plaintext);
             CheckCounter(listm2.counter);
+            std::cout << "  (" << i+1 << ") ";
             listm2.print();
         }
     } catch(const std::runtime_error& ex) {
@@ -177,15 +193,19 @@ void Client::list()
 
         std::cerr << "Something went wrong. Please try again..." << std::endl;
     }
+    std::cout << "=================================================" << std::endl;
 }
 
 void Client::handshake() 
 {
+    std::cout << "=================================================" << std::endl;
+    REQUEST("Login()")
+
     std::string password;
-    std::cout << ">> Insert username: ";
+    std::cout << "  >> Insert username: ";
     std::cin >> m_username;
     getchar(); // To delete the '\n' character
-    std::cout << ">> Insert password: ";
+    std::cout << "  >> Insert password: ";
 
     // Read password with asterisks
     char ch;
@@ -511,7 +531,8 @@ void Client::handshake()
     if (response.outcome == (uint8_t)*denied)
         throw std::runtime_error("\033[1;31m[ERROR]\033[0m Please, try to attempt the login procedure again...");
 
-    std::cout << "Session established." << std::endl;
+    RESPONSE("Session established.\n")
+    std::cout << "=================================================" << std::endl;
 }
 
 void Client::send_to_server(const std::vector<uint8_t> &buffer)

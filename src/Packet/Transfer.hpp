@@ -5,6 +5,7 @@
 #include <openssl/rand.h>
 
 #include "../Generic/Codes.hpp"
+#include "../Generic/Utility.hpp"
 
 struct TransferResponse {
 
@@ -43,9 +44,8 @@ struct TransferResponse {
     }
 
       void print() const {
-        std::cout << "--------- TRANSFER RESPONSE --------" << std::endl;
-        std::cout << "RESPONSE: " << this->outcome << std::endl;
-        std::cout << "COUNTER:" << counter << std::endl;
-        std::cout << "------- END REQUEST MESSAGGE ----------" << std::endl;
+        std::cout << ((this->outcome) ? GREEN_BOLD : RED_BOLD);
+        std::cout << ((this->outcome) ? "OK" : "DENIED");
+        std::cout << RESET << std::endl;
     }
 };

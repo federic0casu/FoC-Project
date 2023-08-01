@@ -2,12 +2,12 @@
 
 static uint32_t menu() {
     uint32_t cmd;
-    std::cout << "========== MENU ==========" << std::endl;
+    std::cout << "====================== MENU =====================" << std::endl;
     std::cout << "0 - Logout" << std::endl;
     std::cout << "1 - Check Balance" << std::endl;
     std::cout << "2 - Make a Transfer" << std::endl;
     std::cout << "3 - List of Transfers" << std::endl;
-    std::cout << "==========================" << std::endl;
+    std::cout << "=================================================" << std::endl;
     std::cout << "Please enter the desired option: ";
     std::cin >> cmd;
     
